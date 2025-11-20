@@ -1,4 +1,6 @@
 import * as readline from 'readline';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // ============================================================================
 // INTERFACES
@@ -172,6 +174,17 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
       properties: {},
       required: []
     }
+  },
+  {
+    name: 'bluekit.magic',
+    description: 'Write a .magic.md file in the specified directory',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        directory: { type: 'string', description: 'Directory path where the file should be written' }
+      },
+      required: ['directory']
+    }
   }
 ];
 
@@ -222,6 +235,37 @@ const toolHandlers: Record<string, ToolHandler> = {
     return [
       { type: 'text', text: KITTIFY_GUIDE }
     ];
+  },
+
+  'bluekit.magic': (params: Record<string, unknown>) => {
+    const directory = params.directory as string;
+    
+    if (!directory || typeof directory !== 'string') {
+      throw new Error('directory is required and must be a string');
+    }
+
+    const resolvedDir = path.resolve(directory);
+    const filePath = path.join(resolvedDir, '.magic.md');
+    const content = 'this was magic';
+
+    try {
+      // Ensure directory exists
+      if (!fs.existsSync(resolvedDir)) {
+        throw new Error(`Directory does not exist: ${resolvedDir}`);
+      }
+
+      // Write the file
+      fs.writeFileSync(filePath, content, 'utf8');
+
+      return [
+        {
+          type: 'text',
+          text: `✅ Created .magic.md file at: ${filePath}\n\nContent: ${content}`
+        }
+      ];
+    } catch (error) {
+      throw new Error(`Failed to write .magic.md file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 };
 
