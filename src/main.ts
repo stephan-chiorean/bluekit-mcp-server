@@ -1,6 +1,7 @@
 import * as readline from 'readline';
 import * as fs from 'fs';
 import * as path from 'path';
+import { loadPrompt } from './promptLoader';
 
 // ============================================================================
 // INTERFACES
@@ -43,88 +44,8 @@ type ToolHandler = (params: Record<string, unknown>) => Array<{ type: 'text'; te
 // CONSTANTS
 // ============================================================================
 
-const KIT_DEFINITION = `A **kit** is a single markdown file that provides generic, modular instructions for building software components. It can include:
-
-1. **Scope flexibility**: Can contain anything from:
-
-   - Small, reusable components (UI components, backend utilities, etc.)
-
-   - Larger features or flows
-
-   - Entire applications (frontend, backend, or full-stack)
-
-   - Any combination of the above
-
-2. **Technology agnostic**: Works for:
-
-   - Frontend components (UI elements, views, flows)
-
-   - Backend components (APIs, services, utilities)
-
-   - Full-stack applications
-
-   - Any technology stack
-
-3. **Modular and composable**: Each component is:
-
-   - Self-contained with complete code and instructions
-
-   - Selectable independently
-
-   - Can be combined with other components
-
-   - Includes dependencies and relationships
-
-4. **AI-agent ready**: Designed to be used with Cursor or similar tools—point the agent at the kit and specify which components to build.
-
-5. **Complete and self-contained**: Each component includes:
-
-   - Full code implementations
-
-   - File paths and structure
-
-   - Dependencies between components
-
-   - Build/setup instructions
-
-   - Customization tokens
-
-6. **Generic and reusable**: Not tied to a specific project—tokens can be replaced to adapt to different contexts.
-
-In short: a kit is a modular, reusable instruction set for building software components of any size, from small utilities to entire applications, across frontend, backend, or full-stack.`;
-
-const KITTIFY_GUIDE = `The **Kittify Guide** explains how to convert an existing project (or part of a project) into reusable BlueKit components.
-
-A kittified project should break itself down into:
-1. **Components** (atomic units of functionality)
-
-2. **Features** (bundles of components)
-
-3. **Flows** (end-to-end experiences)
-
-4. **Systems** (larger architectural groupings)
-
-Each kit produced during kittification must:
-
-- Have a clear purpose and scope
-
-- Include a complete implementation
-
-- Include setup instructions
-
-- Document all dependencies
-
-- Be fully reusable in other contexts
-
-- Optionally contain nested kits
-
-Kittification is recursive:  
-
-Large projects → features → components → utilities.  
-
-Every unit may itself become a kit.
-
-The goal is to create a structured, modular library of reusable building blocks that AI tools can assemble into new applications.`;
+const KIT_DEFINITION = loadPrompt('kits/kit-definition.md');
+const KITTIFY_GUIDE = loadPrompt('kits/kittify-guide.md');
 
 // ============================================================================
 // IN-MEMORY STORE
