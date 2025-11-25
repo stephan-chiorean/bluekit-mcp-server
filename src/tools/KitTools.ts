@@ -220,7 +220,19 @@ After generating the kit content with YAML front matter, use the \`bluekit.kit.g
       throw new Error('projectPath is required and must be a string');
     }
 
-    const resolvedProjectPath = path.resolve(projectPath);
+    // Ensure we have an absolute path
+    // Always normalize the path to handle any edge cases with path resolution
+    // If projectPath is absolute, normalize it directly
+    // If it's relative, resolve it (but this shouldn't happen if projectPath is passed correctly)
+    let resolvedProjectPath: string;
+    if (path.isAbsolute(projectPath)) {
+      resolvedProjectPath = path.normalize(projectPath);
+    } else {
+      // If relative, resolve from current working directory
+      // But warn that this shouldn't typically happen
+      resolvedProjectPath = path.resolve(process.cwd(), projectPath);
+    }
+    
     const bluekitDir = path.join(resolvedProjectPath, '.bluekit');
 
     try {
@@ -237,7 +249,7 @@ After generating the kit content with YAML front matter, use the \`bluekit.kit.g
       return [
         {
           type: 'text',
-          text: `✅ Generated kit: ${path.join(projectPath, '.bluekit', `${name}.md`)}`
+          text: `✅ Generated kit: ${kitPath}`
         }
       ];
     } catch (error) {

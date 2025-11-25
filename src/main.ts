@@ -76,9 +76,14 @@ class MCPServer {
 
     const toolName = params.name;
     const toolArgs = params.arguments || {};
+    
+    // Log tool call to stderr (won't interfere with JSON-RPC protocol)
+    console.error(`[MCP] Tool call: ${toolName}`, JSON.stringify(toolArgs, null, 2));
+    
     const handler = this.tools.getToolHandler(toolName);
     
     if (!handler) {
+      console.error(`[MCP] Tool not found: ${toolName}`);
       return {
         jsonrpc: '2.0',
         id: request.id,
@@ -94,18 +99,24 @@ class MCPServer {
       const result: ToolCallResult = {
         content
       };
+      console.error(`[MCP] Tool ${toolName} completed successfully`);
       return {
         jsonrpc: '2.0',
         id: request.id,
         result
       };
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Internal error';
+      console.error(`[MCP] Tool ${toolName} error:`, errorMessage);
+      if (error instanceof Error && error.stack) {
+        console.error(`[MCP] Stack trace:`, error.stack);
+      }
       return {
         jsonrpc: '2.0',
         id: request.id,
         error: {
           code: -32603,
-          message: error instanceof Error ? error.message : 'Internal error'
+          message: errorMessage
         }
       };
     }
@@ -136,10 +147,19 @@ function main(): void {
         return;
       }
 
+      // Log incoming request to stderr
+      console.error(`[MCP] Request: ${request.method} (id: ${request.id})`);
+
       const response = server.handleRequest(request);
+      
+      // Log response to stderr
+      console.error(`[MCP] Response: ${request.method} (id: ${request.id})`);
+      
+      // Send JSON-RPC response to stdout
       console.log(JSON.stringify(response));
     } catch (error) {
-      // Ignore invalid JSON
+      // Log parsing errors to stderr
+      console.error('[MCP] Error parsing request:', error instanceof Error ? error.message : 'Unknown error');
     }
   });
 }
