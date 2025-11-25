@@ -46,7 +46,6 @@ type ToolHandler = (params: Record<string, unknown>) => Array<{ type: 'text'; te
 // ============================================================================
 
 const KIT_DEFINITION = loadPrompt('get-kit-definition.md');
-const KITTIFY_GUIDE = loadPrompt('get-kittify-guide.md');
 
 // ============================================================================
 // TOOL DEFINITIONS
@@ -72,23 +71,14 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     }
   },
   {
-    name: 'bluekit.getKittifyGuide',
-    description: 'Get the full Kittify Guide text',
-    inputSchema: {
-      type: 'object',
-      properties: {},
-      required: []
-    }
-  },
-  {
     name: 'bluekit.createKit',
-    description: 'Generate a kit from a user description. Takes what the user wants to containerize and provides instructions for creating reusable kit instructions that can be injected into new apps. This is the primary tool for kit generation - it analyzes the user request and returns the kit definition and kittify guide as context for generating the actual kit content.',
+    description: 'Generate a kit from a user description. Takes what the user wants to containerize and provides instructions for creating reusable kit instructions that can be injected into new apps. This is the primary tool for kit generation - it analyzes the user request and returns the kit definition as context for generating the actual kit content.',
     inputSchema: {
       type: 'object',
       properties: {
         description: {
           type: 'string',
-          description: 'User description of what they want to containerize into a kit (e.g., "create a kit for my authentication system", "generate kits for all my UI components", "kittify my payment flow")'
+          description: 'User description of what they want to containerize into a kit (e.g., "create a kit for my authentication system", "generate kits for all my UI components", "create a kit for my payment flow")'
         },
         projectPath: {
           type: 'string',
@@ -176,12 +166,6 @@ const toolHandlers: Record<string, ToolHandler> = {
     ];
   },
 
-  'bluekit.getKittifyGuide': () => {
-    return [
-      { type: 'text', text: KITTIFY_GUIDE }
-    ];
-  },
-
   'bluekit.createKit': (params: Record<string, unknown>) => {
     const description = params.description as string;
     const projectPath = (params.projectPath as string) || process.cwd();
@@ -190,7 +174,7 @@ const toolHandlers: Record<string, ToolHandler> = {
       throw new Error('description is required and must be a string');
     }
 
-    // Return the kit definition and kittify guide as context
+    // Return the kit definition as context
     // along with instructions for generating the kit
     const instructions = `# Kit Generation Instructions
 
@@ -202,9 +186,6 @@ ${description}
 ### Kit Definition
 ${KIT_DEFINITION}
 
-### Kittify Guide
-${KITTIFY_GUIDE}
-
 ## Your Task
 
 Based on the user's description above, analyze what they want to containerize and generate a complete kit that:
@@ -212,9 +193,8 @@ Based on the user's description above, analyze what they want to containerize an
 1. **Extracts the essence** of what the user wants to containerize
 2. **Creates modular, reusable instructions** that can be injected into new apps
 3. **Follows the Kit Definition** structure (components, features, flows, or systems)
-4. **Follows the Kittify Guide** principles (break down into components, features, flows, systems)
-5. **Is technology agnostic** and uses tokens for customization
-6. **Is complete and self-contained** with full implementations, file paths, dependencies, and setup instructions
+4. **Is technology agnostic** and uses tokens for customization
+5. **Is complete and self-contained** with full implementations, file paths, dependencies, and setup instructions
 
 ## Project Context
 Project path: ${projectPath}
@@ -472,10 +452,15 @@ function handleToolsCall(request: JsonRpcRequest): JsonRpcResponse {
     };
   }
 
-  const toolName = params.name;
+  let toolName = params.name;
   const toolArgs = params.arguments || {};
 
-  const handler = toolHandlers[toolName];
+  // Normalize tool name: convert underscores to dots for compatibility
+  // This allows both bluekit.ping and bluekit_ping to work
+  const normalizedToolName = toolName.replace(/_/g, '.');
+  
+  // Try the normalized name first, then fall back to original
+  let handler = toolHandlers[normalizedToolName] || toolHandlers[toolName];
   
   if (!handler) {
     return {
