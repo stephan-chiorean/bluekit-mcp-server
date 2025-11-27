@@ -1,6 +1,5 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import * as yaml from 'js-yaml';
 import { loadPrompt } from '../promptLoader.js';
 import { ToolDefinition, ToolHandler } from '../types.js';
@@ -26,75 +25,8 @@ export class WalkthroughTools extends BaseToolSet {
         }
       },
       {
-        name: 'bluekit.getWalkthroughDefinition',
-        description: 'Get the full Walkthrough Definition text (legacy alias)',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-          required: []
-        }
-      },
-      {
-        name: 'bluekit.walkthrough.createWalkthrough',
-        description: 'Create a walkthrough from a user description. Analyzes what the user wants to understand and provides instructions for creating a section-by-section, chapter-by-chapter walkthrough that explains how code works.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            description: {
-              type: 'string',
-              description: 'User description of what they want to understand (e.g., "create a walkthrough for my authentication system", "create a walkthrough for how my payment flow works", "create a walkthrough for understanding my API structure")'
-            },
-            projectPath: {
-              type: 'string',
-              description: 'Optional path to the project directory to analyze. If not provided, uses current working directory.'
-            }
-          },
-          required: ['description']
-        }
-      },
-      {
-        name: 'bluekit.createWalkthrough',
-        description: 'Create a walkthrough from a user description (legacy alias)',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            description: {
-              type: 'string',
-              description: 'User description of what they want to understand (e.g., "create a walkthrough for my authentication system", "create a walkthrough for how my payment flow works", "create a walkthrough for understanding my API structure")'
-            },
-            projectPath: {
-              type: 'string',
-              description: 'Optional path to the project directory to analyze. If not provided, uses current working directory.'
-            }
-          },
-          required: ['description']
-        }
-      },
-      {
         name: 'bluekit.walkthrough.generateWalkthrough',
-        description: 'Generate a walkthrough file in the .bluekit directory of the specified project path with the generated content. Use this after bluekit.walkthrough.createWalkthrough has provided the context and walkthrough content has been generated.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            name: { 
-              type: 'string',
-              description: 'Name of the walkthrough'
-            },
-            content: {
-              type: 'string',
-              description: 'Walkthrough content (markdown)'
-            },
-            projectPath: {
-              type: 'string',
-              description: 'Path to the project directory where the walkthrough file should be created. The walkthrough will be saved in the .bluekit directory within this project path.'
-            }
-          },
-          required: ['name', 'content', 'projectPath']
-        }
-      },
-      {
-        name: 'bluekit.generateWalkthrough',
-        description: 'Generate a walkthrough file (legacy alias)',
+        description: 'Generate a walkthrough file in the .bluekit directory of the specified project path with the generated content. Use bluekit.walkthrough.getWalkthroughDefinition to get the walkthrough definition for context, then generate the walkthrough content and use this tool to save it.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -120,88 +52,13 @@ export class WalkthroughTools extends BaseToolSet {
   protected createToolHandlers(): Record<string, ToolHandler> {
     return {
       'bluekit.walkthrough.getWalkthroughDefinition': () => this.handleGetWalkthroughDefinition(),
-      'bluekit.getWalkthroughDefinition': () => this.handleGetWalkthroughDefinition(), // Legacy alias
-      'bluekit.walkthrough.createWalkthrough': (params) => this.handleCreateWalkthrough(params),
-      'bluekit.createWalkthrough': (params) => this.handleCreateWalkthrough(params), // Legacy alias
-      'bluekit.walkthrough.generateWalkthrough': (params) => this.handleGenerateWalkthrough(params),
-      'bluekit.generateWalkthrough': (params) => this.handleGenerateWalkthrough(params) // Legacy alias
+      'bluekit.walkthrough.generateWalkthrough': (params) => this.handleGenerateWalkthrough(params)
     };
   }
 
   private handleGetWalkthroughDefinition(): Array<{ type: 'text'; text: string }> {
     return [
       { type: 'text', text: this.walkthroughDefinition }
-    ];
-  }
-
-  private handleCreateWalkthrough(params: Record<string, unknown>): Array<{ type: 'text'; text: string }> {
-    const description = params.description as string;
-    const projectPath = (params.projectPath as string) || process.cwd();
-    
-    if (!description || typeof description !== 'string') {
-      throw new Error('description is required and must be a string');
-    }
-
-    const instructions = `# Walkthrough Generation Instructions
-
-## User Request
-${description}
-
-## Context for Walkthrough Generation
-
-### Walkthrough Definition
-${this.walkthroughDefinition}
-
-## Your Task
-
-Based on the user's description above, analyze what they want to understand and generate a complete walkthrough that:
-
-1. **Breaks down the code** into logical sections and chapters
-2. **Explains how things work** step-by-step, section-by-section
-3. **Follows the Walkthrough Definition** structure (section-by-section, chapter-by-chapter explanations)
-4. **Is educational and clear** with detailed explanations of concepts and code flow
-5. **Is complete and comprehensive** covering all relevant parts of the codebase or feature being explained
-
-## Walkthrough File Format
-
-**IMPORTANT**: All walkthroughs MUST start with YAML front matter containing the following fields:
-
-\`\`\`yaml
----
-id: <walkthrough-id>
-alias: <walkthrough-display-name>
-type: walkthrough
-is_base: <true|false>
-version: <version-number>
-tags: [<tag1>, <tag2>, ...]
-description: "<walkthrough-description>"
----
-\`\`\`
-
-Example:
-\`\`\`yaml
----
-id: authentication-flow-walkthrough
-alias: Authentication Flow Walkthrough
-type: walkthrough
-is_base: true
-version: 1
-tags: [authentication, security, flow]
-description: "Step-by-step walkthrough explaining how the authentication system works"
----
-\`\`\`
-
-The YAML front matter should be followed by the walkthrough content (markdown).
-
-## Project Context
-Project path: ${projectPath}
-
-## Next Steps
-
-After generating the walkthrough content with YAML front matter, use the \`bluekit.walkthrough.generateWalkthrough\` tool with the projectPath to save it in the project's .bluekit directory.`;
-
-    return [
-      { type: 'text', text: instructions }
     ];
   }
 

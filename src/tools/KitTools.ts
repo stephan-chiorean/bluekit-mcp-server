@@ -1,6 +1,5 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import * as yaml from 'js-yaml';
 import { loadPrompt } from '../promptLoader.js';
 import { ToolDefinition, ToolHandler } from '../types.js';
@@ -26,75 +25,8 @@ export class KitTools extends BaseToolSet {
         }
       },
       {
-        name: 'bluekit.getKitDefinition',
-        description: 'Get the full Kit Definition text (legacy alias)',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-          required: []
-        }
-      },
-      {
-        name: 'bluekit.kit.createKit',
-        description: 'Create a kit from a user description. Analyzes what the user wants to containerize and provides instructions for creating reusable kit instructions that can be injected into new apps. Returns the kit definition as context for generating the actual kit content.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            description: {
-              type: 'string',
-              description: 'User description of what they want to containerize into a kit (e.g., "create a kit for my authentication system", "create a kit for all my UI components", "create a kit for my payment flow")'
-            },
-            projectPath: {
-              type: 'string',
-              description: 'Optional path to the project directory to analyze. If not provided, uses current working directory.'
-            }
-          },
-          required: ['description']
-        }
-      },
-      {
-        name: 'bluekit.createKit',
-        description: 'Create a kit from a user description (legacy alias)',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            description: {
-              type: 'string',
-              description: 'User description of what they want to containerize into a kit (e.g., "create a kit for my authentication system", "create a kit for all my UI components", "create a kit for my payment flow")'
-            },
-            projectPath: {
-              type: 'string',
-              description: 'Optional path to the project directory to analyze. If not provided, uses current working directory.'
-            }
-          },
-          required: ['description']
-        }
-      },
-      {
         name: 'bluekit.kit.generateKit',
-        description: 'Generate a kit file in the .bluekit directory of the specified project path with the generated content. Use this after bluekit.kit.createKit has provided the context and kit content has been generated.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            name: { 
-              type: 'string',
-              description: 'Name of the kit'
-            },
-            content: {
-              type: 'string',
-              description: 'Kit content (markdown)'
-            },
-            projectPath: {
-              type: 'string',
-              description: 'Path to the project directory where the kit file should be created. The kit will be saved in the .bluekit directory within this project path.'
-            }
-          },
-          required: ['name', 'content', 'projectPath']
-        }
-      },
-      {
-        name: 'bluekit.generateKit',
-        description: 'Generate a kit file (legacy alias)',
+        description: 'Generate a kit file in the .bluekit directory of the specified project path with the generated content. Use bluekit.kit.getKitDefinition to get the kit definition for context, then generate the kit content and use this tool to save it.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -120,88 +52,13 @@ export class KitTools extends BaseToolSet {
   protected createToolHandlers(): Record<string, ToolHandler> {
     return {
       'bluekit.kit.getKitDefinition': () => this.handleGetKitDefinition(),
-      'bluekit.getKitDefinition': () => this.handleGetKitDefinition(), // Legacy alias
-      'bluekit.kit.createKit': (params) => this.handleCreateKit(params),
-      'bluekit.createKit': (params) => this.handleCreateKit(params), // Legacy alias
-      'bluekit.kit.generateKit': (params) => this.handleGenerateKit(params),
-      'bluekit.generateKit': (params) => this.handleGenerateKit(params) // Legacy alias
+      'bluekit.kit.generateKit': (params) => this.handleGenerateKit(params)
     };
   }
 
   private handleGetKitDefinition(): Array<{ type: 'text'; text: string }> {
     return [
       { type: 'text', text: this.kitDefinition }
-    ];
-  }
-
-  private handleCreateKit(params: Record<string, unknown>): Array<{ type: 'text'; text: string }> {
-    const description = params.description as string;
-    const projectPath = (params.projectPath as string) || process.cwd();
-    
-    if (!description || typeof description !== 'string') {
-      throw new Error('description is required and must be a string');
-    }
-
-    const instructions = `# Kit Generation Instructions
-
-## User Request
-${description}
-
-## Context for Kit Generation
-
-### Kit Definition
-${this.kitDefinition}
-
-## Your Task
-
-Based on the user's description above, analyze what they want to containerize and generate a complete kit that:
-
-1. **Extracts the essence** of what the user wants to containerize
-2. **Creates modular, reusable instructions** that can be injected into new apps
-3. **Follows the Kit Definition** structure (components, features, flows, or systems)
-4. **Is technology agnostic** and uses tokens for customization
-5. **Is complete and self-contained** with full implementations, file paths, dependencies, and setup instructions
-
-## Kit File Format
-
-**IMPORTANT**: All kits MUST start with YAML front matter containing the following fields:
-
-\`\`\`yaml
----
-id: <kit-id>
-alias: <kit-display-name>
-type: kit
-is_base: <true|false>
-version: <version-number>
-tags: [<tag1>, <tag2>, ...]
-description: "<kit-description>"
----
-\`\`\`
-
-Example:
-\`\`\`yaml
----
-id: tauri-file-watching
-alias: Tauri File Watching
-type: kit
-is_base: true
-version: 1
-tags: [tauri, file-system, events]
-description: "Pattern for watching files in a Tauri application and updating the frontend"
----
-\`\`\`
-
-The YAML front matter should be followed by the kit content (markdown).
-
-## Project Context
-Project path: ${projectPath}
-
-## Next Steps
-
-After generating the kit content with YAML front matter, use the \`bluekit.kit.generateKit\` tool with the projectPath to save it in the project's .bluekit directory.`;
-
-    return [
-      { type: 'text', text: instructions }
     ];
   }
 

@@ -1,50 +1,20 @@
-A **kit** is a single markdown file that provides generic, modular instructions for building software components. It can include:
+A **Kit** is a single, self-contained markdown instruction file that represents one atomic agent execution.
 
-1. **Scope flexibility**: Can contain anything from:
+A Kit:
 
-   - Small, reusable components (UI components, backend utilities, etc.)
+1. **Defines one coherent unit of work**: Can be a component, flow, feature, or entire app
 
-   - Larger features or flows
+2. **Contains complete instructions + code + structure**: Everything needed for that unit in one file
 
-   - Entire applications (frontend, backend, or full-stack)
+3. **Is technology-agnostic**: Works across any technology stack
 
-   - Any combination of the above
+4. **Is modular, reusable, and parameterizable**: Uses tokens for customization and adaptation
 
-2. **Technology agnostic**: Works for:
+5. **Is AI-agent ready**: 1 kit → 1 agent context → 1 execution
 
-   - Frontend components (UI elements, views, flows)
+6. **Is not tied to any project**: Tokens make it adaptable to different contexts
 
-   - Backend components (APIs, services, utilities)
+In short:
 
-   - Full-stack applications
-
-   - Any technology stack
-
-3. **Modular and composable**: Each component is:
-
-   - Self-contained with complete code and instructions
-
-   - Selectable independently
-
-   - Can be combined with other components
-
-   - Includes dependencies and relationships
-
-4. **AI-agent ready**: Designed to be used with Cursor or similar tools—point the agent at the kit and specify which components to build.
-
-5. **Complete and self-contained**: Each component includes:
-
-   - Full code implementations
-
-   - File paths and structure
-
-   - Dependencies between components
-
-   - Build/setup instructions
-
-   - Customization tokens
-
-6. **Generic and reusable**: Not tied to a specific project—tokens can be replaced to adapt to different contexts.
-
-In short: a kit is a modular, reusable instruction set for building software components of any size, from small utilities to entire applications, across frontend, backend, or full-stack.
+➡️ A Kit is the atomic instruction set for a single agent run, containing everything needed to build one modular piece of software.
 
