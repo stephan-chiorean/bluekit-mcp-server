@@ -1,16 +1,20 @@
+import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as yaml from 'js-yaml';
 import { loadPrompt } from '../promptLoader.js';
-import { ToolDefinition, ToolHandler } from '../types.js';
+import { ToolDefinition, ToolHandler, Blueprint } from '../types.js';
 import { BaseToolSet } from './BaseToolSet.js';
 
 export class BlueprintTools extends BaseToolSet {
   private readonly blueprintDefinition: string;
+  private readonly blueprintRegistryPath: string;
 
   constructor() {
     super();
     this.blueprintDefinition = loadPrompt('get-blueprint-definition.md');
+    const homeDir = os.homedir();
+    const bluekitStoreDir = path.join(homeDir, '.bluekit');
+    this.blueprintRegistryPath = path.join(bluekitStoreDir, 'blueprintRegistry.json');
   }
 
   protected createToolDefinitions(): ToolDefinition[] {
@@ -26,24 +30,39 @@ export class BlueprintTools extends BaseToolSet {
       },
       {
         name: 'bluekit.blueprint.generateBlueprint',
-        description: 'Generate a blueprint file in the .bluekit directory of the specified project path with the generated content. Use bluekit.blueprint.getBlueprintDefinition to get the blueprint definition for context, then generate the blueprint content and use this tool to save it.',
+        description: 'Generate a blueprint JSON file in the global ~/.bluekit/blueprintRegistry.json. Use bluekit.blueprint.getBlueprintDefinition to get the blueprint definition for context, then generate the blueprint JSON object and use this tool to save it.',
         inputSchema: {
           type: 'object',
           properties: {
-            name: { 
-              type: 'string',
-              description: 'Name of the blueprint'
-            },
-            content: {
-              type: 'string',
-              description: 'Blueprint content (markdown)'
-            },
-            projectPath: {
-              type: 'string',
-              description: 'Path to the project directory where the blueprint file should be created. The blueprint will be saved in the .bluekit directory within this project path.'
+            blueprint: {
+              type: 'object',
+              description: 'Blueprint JSON object with id, name, version, description, and layers (each layer has id, order, name, and tasks array)'
             }
           },
-          required: ['name', 'content', 'projectPath']
+          required: ['blueprint']
+        }
+      },
+      {
+        name: 'bluekit.blueprint.listBlueprints',
+        description: 'List all blueprints in the global blueprint registry',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+          required: []
+        }
+      },
+      {
+        name: 'bluekit.blueprint.getBlueprint',
+        description: 'Get a specific blueprint by ID from the global blueprint registry',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'string',
+              description: 'ID of the blueprint to retrieve'
+            }
+          },
+          required: ['id']
         }
       }
     ];
@@ -52,7 +71,9 @@ export class BlueprintTools extends BaseToolSet {
   protected createToolHandlers(): Record<string, ToolHandler> {
     return {
       'bluekit.blueprint.getBlueprintDefinition': () => this.handleGetBlueprintDefinition(),
-      'bluekit.blueprint.generateBlueprint': (params) => this.handleGenerateBlueprint(params)
+      'bluekit.blueprint.generateBlueprint': (params) => this.handleGenerateBlueprint(params),
+      'bluekit.blueprint.listBlueprints': () => this.handleListBlueprints(),
+      'bluekit.blueprint.getBlueprint': (params) => this.handleGetBlueprint(params)
     };
   }
 
@@ -63,52 +84,108 @@ export class BlueprintTools extends BaseToolSet {
   }
 
   private handleGenerateBlueprint(params: Record<string, unknown>): Array<{ type: 'text'; text: string }> {
-    const name = params.name as string;
-    const content = params.content as string;
-    const projectPath = params.projectPath as string;
+    const blueprint = params.blueprint as Blueprint;
     
-    if (!name || typeof name !== 'string') {
-      throw new Error('name is required and must be a string');
+    if (!blueprint || typeof blueprint !== 'object') {
+      throw new Error('blueprint is required and must be an object');
     }
 
-    if (!content || typeof content !== 'string') {
-      throw new Error('content is required and must be a string');
+    // Validate blueprint structure
+    if (!blueprint.id || typeof blueprint.id !== 'string') {
+      throw new Error('blueprint.id is required and must be a string');
+    }
+    if (!blueprint.name || typeof blueprint.name !== 'string') {
+      throw new Error('blueprint.name is required and must be a string');
+    }
+    if (typeof blueprint.version !== 'number') {
+      throw new Error('blueprint.version is required and must be a number');
+    }
+    if (!blueprint.description || typeof blueprint.description !== 'string') {
+      throw new Error('blueprint.description is required and must be a string');
+    }
+    if (!Array.isArray(blueprint.layers)) {
+      throw new Error('blueprint.layers is required and must be an array');
     }
 
-    if (!projectPath || typeof projectPath !== 'string') {
-      throw new Error('projectPath is required and must be a string');
-    }
-
-    // Ensure we have an absolute path
-    // Always normalize the path to handle any edge cases with path resolution
-    // If projectPath is absolute, normalize it directly
-    // If it's relative, resolve it (but this shouldn't happen if projectPath is passed correctly)
-    let resolvedProjectPath: string;
-    if (path.isAbsolute(projectPath)) {
-      resolvedProjectPath = path.normalize(projectPath);
-    } else {
-      // If relative, resolve from current working directory
-      // But warn that this shouldn't typically happen
-      resolvedProjectPath = path.resolve(process.cwd(), projectPath);
-    }
-    
-    const bluekitDir = path.join(resolvedProjectPath, '.bluekit');
-
-    try {
-      if (!fs.existsSync(bluekitDir)) {
-        fs.mkdirSync(bluekitDir, { recursive: true });
+    // Validate layers
+    for (const layer of blueprint.layers) {
+      if (!layer.id || typeof layer.id !== 'string') {
+        throw new Error('Each layer must have an id (string)');
+      }
+      if (typeof layer.order !== 'number') {
+        throw new Error('Each layer must have an order (number)');
+      }
+      if (!layer.name || typeof layer.name !== 'string') {
+        throw new Error('Each layer must have a name (string)');
+      }
+      if (!Array.isArray(layer.tasks)) {
+        throw new Error('Each layer must have a tasks array');
       }
 
-      // Ensure content has YAML front matter
-      const contentWithFrontMatter = this.ensureYamlFrontMatter(content, name);
+      // Validate tasks
+      for (const task of layer.tasks) {
+        if (!task.id || typeof task.id !== 'string') {
+          throw new Error('Each task must have an id (string)');
+        }
+        if (!task.alias || typeof task.alias !== 'string') {
+          throw new Error('Each task must have an alias (string)');
+        }
+        if (!task.agent || typeof task.agent !== 'string') {
+          throw new Error('Each task must have an agent (string)');
+        }
+        if (!task.kit || typeof task.kit !== 'string') {
+          throw new Error('Each task must have a kit (string)');
+        }
+      }
+    }
 
-      const blueprintPath = path.join(bluekitDir, `${name}.md`);
-      fs.writeFileSync(blueprintPath, contentWithFrontMatter, 'utf8');
+    const homeDir = os.homedir();
+    const bluekitStoreDir = path.join(homeDir, '.bluekit');
 
+    try {
+      // Ensure ~/.bluekit directory exists
+      if (!fs.existsSync(bluekitStoreDir)) {
+        fs.mkdirSync(bluekitStoreDir, { recursive: true });
+      }
+
+      // Read existing registry or create new one
+      let registry: Blueprint[] = [];
+      if (fs.existsSync(this.blueprintRegistryPath)) {
+        try {
+          const registryContent = fs.readFileSync(this.blueprintRegistryPath, 'utf8');
+          registry = JSON.parse(registryContent);
+          
+          if (!Array.isArray(registry)) {
+            registry = [];
+          }
+        } catch (error) {
+          registry = [];
+        }
+      }
+
+      // Check if blueprint with same ID exists
+      const existingIndex = registry.findIndex(b => b.id === blueprint.id);
+      
+      if (existingIndex >= 0) {
+        // Update existing blueprint
+        registry[existingIndex] = blueprint;
+      } else {
+        // Add new blueprint
+        registry.push(blueprint);
+      }
+
+      // Write registry back to file
+      fs.writeFileSync(this.blueprintRegistryPath, JSON.stringify(registry, null, 2), 'utf8');
+
+      const action = existingIndex >= 0 ? 'updated' : 'added';
       return [
         {
           type: 'text',
-          text: `✅ Generated blueprint: ${blueprintPath}`
+          text: `✅ Blueprint ${action} to registry!\n\n` +
+                `Registry location: ${this.blueprintRegistryPath}\n` +
+                `Blueprint ID: ${blueprint.id}\n` +
+                `Blueprint Name: ${blueprint.name}\n` +
+                `Total blueprints in registry: ${registry.length}`
         }
       ];
     } catch (error) {
@@ -116,92 +193,77 @@ export class BlueprintTools extends BaseToolSet {
     }
   }
 
-  /**
-   * Ensures the blueprint content has YAML front matter. If it doesn't exist, adds a default one.
-   */
-  private ensureYamlFrontMatter(content: string, blueprintName: string): string {
-    // Check if content already has YAML front matter
-    const frontMatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n/;
-    const match = content.match(frontMatterRegex);
-
-    if (match) {
-      // Front matter exists, validate and return as-is
-      try {
-        const frontMatter = yaml.load(match[1]) as Record<string, unknown>;
-        // Validate required fields
-        if (!frontMatter.id) {
-          frontMatter.id = this.generateBlueprintId(blueprintName);
-        }
-        if (!frontMatter.alias) {
-          frontMatter.alias = this.formatBlueprintAlias(blueprintName);
-        }
-        if (!frontMatter.type) {
-          frontMatter.type = 'blueprint';
-        }
-        if (frontMatter.is_base === undefined) {
-          frontMatter.is_base = false;
-        }
-        if (!frontMatter.version) {
-          frontMatter.version = 1;
-        }
-        if (!frontMatter.tags) {
-          frontMatter.tags = [];
-        }
-        if (!frontMatter.description) {
-          frontMatter.description = '';
-        }
-
-        // Reconstruct content with validated front matter
-        const validatedFrontMatter = yaml.dump(frontMatter, { lineWidth: -1 }).trim();
-        const bodyContent = content.substring(match[0].length);
-        return `---\n${validatedFrontMatter}\n---\n${bodyContent}`;
-      } catch (error) {
-        // If YAML parsing fails, replace with valid front matter
-        const bodyContent = content.substring(match[0].length);
-        return this.createDefaultFrontMatter(blueprintName) + bodyContent;
+  private handleListBlueprints(): Array<{ type: 'text'; text: string }> {
+    try {
+      if (!fs.existsSync(this.blueprintRegistryPath)) {
+        return [
+          {
+            type: 'text',
+            text: 'No blueprints found. Registry does not exist yet.'
+          }
+        ];
       }
-    } else {
-      // No front matter exists, add default one
-      return this.createDefaultFrontMatter(blueprintName) + content;
+
+      const registryContent = fs.readFileSync(this.blueprintRegistryPath, 'utf8');
+      const registry: Blueprint[] = JSON.parse(registryContent);
+      
+      if (!Array.isArray(registry) || registry.length === 0) {
+        return [
+          {
+            type: 'text',
+            text: 'No blueprints found in registry.'
+          }
+        ];
+      }
+
+      const blueprintList = registry.map(b => 
+        `- ${b.name} (ID: ${b.id}, Version: ${b.version})\n  ${b.description}`
+      ).join('\n\n');
+
+      return [
+        {
+          type: 'text',
+          text: `Found ${registry.length} blueprint(s):\n\n${blueprintList}`
+        }
+      ];
+    } catch (error) {
+      throw new Error(`Failed to list blueprints: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  /**
-   * Creates default YAML front matter for a blueprint
-   */
-  private createDefaultFrontMatter(blueprintName: string): string {
-    const frontMatter = {
-      id: this.generateBlueprintId(blueprintName),
-      alias: this.formatBlueprintAlias(blueprintName),
-      type: 'blueprint',
-      is_base: false,
-      version: 1,
-      tags: [] as string[],
-      description: ''
-    };
+  private handleGetBlueprint(params: Record<string, unknown>): Array<{ type: 'text'; text: string }> {
+    const id = params.id as string;
+    
+    if (!id || typeof id !== 'string') {
+      throw new Error('id is required and must be a string');
+    }
 
-    const yamlContent = yaml.dump(frontMatter, { lineWidth: -1 }).trim();
-    return `---\n${yamlContent}\n---\n\n`;
-  }
+    try {
+      if (!fs.existsSync(this.blueprintRegistryPath)) {
+        throw new Error(`Blueprint with ID "${id}" not found. Registry does not exist.`);
+      }
 
-  /**
-   * Generates a blueprint ID from a blueprint name (kebab-case)
-   */
-  private generateBlueprintId(name: string): string {
-    return name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
-  }
+      const registryContent = fs.readFileSync(this.blueprintRegistryPath, 'utf8');
+      const registry: Blueprint[] = JSON.parse(registryContent);
+      
+      if (!Array.isArray(registry)) {
+        throw new Error(`Blueprint with ID "${id}" not found.`);
+      }
 
-  /**
-   * Formats a blueprint name as a display alias (Title Case)
-   */
-  private formatBlueprintAlias(name: string): string {
-    return name
-      .split(/[-_\s]+/)
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(' ');
+      const blueprint = registry.find(b => b.id === id);
+      
+      if (!blueprint) {
+        throw new Error(`Blueprint with ID "${id}" not found.`);
+      }
+
+      return [
+        {
+          type: 'text',
+          text: JSON.stringify(blueprint, null, 2)
+        }
+      ];
+    } catch (error) {
+      throw new Error(`Failed to get blueprint: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 }
-

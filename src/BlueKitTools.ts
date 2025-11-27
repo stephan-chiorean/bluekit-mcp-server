@@ -3,6 +3,7 @@ import { IToolSet } from './tools/BaseToolSet.js';
 import { KitTools } from './tools/KitTools.js';
 import { BlueprintTools } from './tools/BlueprintTools.js';
 import { WalkthroughTools } from './tools/WalkthroughTools.js';
+import { AgentTools } from './tools/AgentTools.js';
 import { CollectionTools } from './tools/CollectionTools.js';
 import { CommonTools } from './tools/CommonTools.js';
 
@@ -13,6 +14,7 @@ export class BlueKitTools {
   private readonly kitTools: KitTools;
   private readonly blueprintTools: BlueprintTools;
   private readonly walkthroughTools: WalkthroughTools;
+  private readonly agentTools: AgentTools;
   private readonly collectionTools: CollectionTools;
   private readonly commonTools: CommonTools;
   private readonly allToolSets: IToolSet[];
@@ -21,6 +23,7 @@ export class BlueKitTools {
     this.kitTools = new KitTools();
     this.blueprintTools = new BlueprintTools();
     this.walkthroughTools = new WalkthroughTools();
+    this.agentTools = new AgentTools();
     this.collectionTools = new CollectionTools();
     this.commonTools = new CommonTools();
     
@@ -29,6 +32,7 @@ export class BlueKitTools {
       this.kitTools,
       this.blueprintTools,
       this.walkthroughTools,
+      this.agentTools,
       this.collectionTools,
       this.commonTools
     ]);
@@ -37,6 +41,7 @@ export class BlueKitTools {
       this.kitTools,
       this.blueprintTools,
       this.walkthroughTools,
+      this.agentTools,
       this.collectionTools,
       this.commonTools
     ];

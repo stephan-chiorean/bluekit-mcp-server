@@ -31,3 +31,26 @@ export interface ToolDefinition {
 
 export type ToolHandler = (params: Record<string, unknown>) => Array<{ type: 'text'; text: string }>;
 
+// Blueprint types
+export interface BlueprintTask {
+  id: string;
+  alias: string;
+  agent: string;
+  kit: string;
+}
+
+export interface BlueprintLayer {
+  id: string;
+  order: number;
+  name: string;
+  tasks: BlueprintTask[];
+}
+
+export interface Blueprint {
+  id: string;
+  name: string;
+  version: number;
+  description: string;
+  layers: BlueprintLayer[];
+}
+
