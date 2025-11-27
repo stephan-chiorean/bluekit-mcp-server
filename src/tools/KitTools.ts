@@ -170,6 +170,7 @@ Based on the user's description above, analyze what they want to containerize an
 ---
 id: <kit-id>
 alias: <kit-display-name>
+type: kit
 is_base: <true|false>
 version: <version-number>
 tags: [<tag1>, <tag2>, ...]
@@ -182,6 +183,7 @@ Example:
 ---
 id: tauri-file-watching
 alias: Tauri File Watching
+type: kit
 is_base: true
 version: 1
 tags: [tauri, file-system, events]
@@ -276,6 +278,9 @@ After generating the kit content with YAML front matter, use the \`bluekit.kit.g
         if (!frontMatter.alias) {
           frontMatter.alias = this.formatKitAlias(kitName);
         }
+        if (!frontMatter.type) {
+          frontMatter.type = 'kit';
+        }
         if (frontMatter.is_base === undefined) {
           frontMatter.is_base = false;
         }
@@ -311,6 +316,7 @@ After generating the kit content with YAML front matter, use the \`bluekit.kit.g
     const frontMatter = {
       id: this.generateKitId(kitName),
       alias: this.formatKitAlias(kitName),
+      type: 'kit',
       is_base: false,
       version: 1,
       tags: [] as string[],
