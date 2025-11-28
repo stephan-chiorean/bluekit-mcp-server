@@ -1,36 +1,23 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
-import { loadPrompt } from '../promptLoader.js';
-import { ToolDefinition, ToolHandler } from '../types.js';
+import { ToolDefinition, ToolHandler, Agent } from '../types.js';
 import { BaseToolSet } from './BaseToolSet.js';
 
 export class AgentTools extends BaseToolSet {
-  private readonly agentDefinition: string;
-
   constructor() {
     super();
-    this.agentDefinition = loadPrompt('get-agent-definition.md');
   }
 
   protected createToolDefinitions(): ToolDefinition[] {
     return [
       {
-        name: 'bluekit.agent.getAgentDefinition',
-        description: 'Get the full Agent Definition text',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-          required: []
-        }
-      },
-      {
-        name: 'bluekit.agent.generateAgent',
-        description: 'Generate an agent file in the .bluekit directory of the specified project path with the generated content. Use bluekit.agent.getAgentDefinition to get the agent definition for context, then generate the agent content and use this tool to save it.',
+        name: 'bluekit_agent_generateAgent',
+        description: 'Generate an agent file in the .bluekit directory of the specified project path with the generated content. Read the agent definition from MCP resources (bluekit://prompts/get-agent-definition.md) for context, then generate the agent content and use this tool to save it.',
         inputSchema: {
           type: 'object',
           properties: {
-            name: { 
+            name: {
               type: 'string',
               description: 'Name of the agent'
             },
@@ -51,15 +38,8 @@ export class AgentTools extends BaseToolSet {
 
   protected createToolHandlers(): Record<string, ToolHandler> {
     return {
-      'bluekit.agent.getAgentDefinition': () => this.handleGetAgentDefinition(),
-      'bluekit.agent.generateAgent': (params) => this.handleGenerateAgent(params)
+      'bluekit_agent_generateAgent': (params) => this.handleGenerateAgent(params)
     };
-  }
-
-  private handleGetAgentDefinition(): Array<{ type: 'text'; text: string }> {
-    return [
-      { type: 'text', text: this.agentDefinition }
-    ];
   }
 
   private handleGenerateAgent(params: Record<string, unknown>): Array<{ type: 'text'; text: string }> {
@@ -113,6 +93,7 @@ export class AgentTools extends BaseToolSet {
 
   /**
    * Ensures the agent content has YAML front matter. If it doesn't exist, adds a default one.
+   * Validates and ensures all required Agent fields are present.
    */
   private ensureYamlFrontMatter(content: string, agentName: string): string {
     // Check if content already has YAML front matter
@@ -120,30 +101,35 @@ export class AgentTools extends BaseToolSet {
     const match = content.match(frontMatterRegex);
 
     if (match) {
-      // Front matter exists, validate and ensure type is 'agent'
+      // Front matter exists, validate and ensure all required fields
       try {
         const frontMatter = yaml.load(match[1]) as Record<string, unknown>;
-        // Validate required fields
-        if (!frontMatter.id) {
+        
+        // Validate and set required fields
+        if (!frontMatter.id || typeof frontMatter.id !== 'string') {
           frontMatter.id = this.generateAgentId(agentName);
         }
-        if (!frontMatter.alias) {
+        if (!frontMatter.alias || typeof frontMatter.alias !== 'string') {
           frontMatter.alias = this.formatAgentAlias(agentName);
         }
         // Ensure type is 'agent'
         frontMatter.type = 'agent';
-        if (frontMatter.is_base === undefined) {
-          frontMatter.is_base = false;
-        }
-        if (!frontMatter.version) {
+        if (typeof frontMatter.version !== 'number') {
           frontMatter.version = 1;
         }
-        if (!frontMatter.tags) {
+        if (!Array.isArray(frontMatter.tags)) {
           frontMatter.tags = [];
         }
-        if (!frontMatter.description) {
+        if (!frontMatter.description || typeof frontMatter.description !== 'string') {
           frontMatter.description = '';
         }
+        // Ensure capabilities array exists and validate it
+        if (!Array.isArray(frontMatter.capabilities)) {
+          frontMatter.capabilities = [];
+        }
+        // Validate capabilities: should have 3 items, but we don't enforce it here
+        // The agent definition prompt instructs to provide 3 capabilities
+        // executionNotes is optional, so we don't set it if it's not present
 
         // Reconstruct content with validated front matter
         const validatedFrontMatter = yaml.dump(frontMatter, { lineWidth: -1 }).trim();
@@ -162,16 +148,17 @@ export class AgentTools extends BaseToolSet {
 
   /**
    * Creates default YAML front matter for an agent
+   * Matches the Agent interface structure
    */
   private createDefaultFrontMatter(agentName: string): string {
-    const frontMatter = {
+    const frontMatter: Agent = {
       id: this.generateAgentId(agentName),
       alias: this.formatAgentAlias(agentName),
       type: 'agent',
-      is_base: false,
       version: 1,
-      tags: [] as string[],
-      description: ''
+      description: '',
+      tags: [],
+      capabilities: []
     };
 
     const yamlContent = yaml.dump(frontMatter, { lineWidth: -1 }).trim();

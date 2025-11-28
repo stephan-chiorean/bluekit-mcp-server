@@ -19,3 +19,18 @@ An agent.md should contain:
 
 An agent.md file must have `type: agent` in the YAML front matter, otherwise it follows the same structure as kits and walkthroughs.
 
+## YAML Front Matter Structure
+
+The YAML front matter must include:
+
+- `id`: Unique identifier (kebab-case, e.g., 'rust-expert')
+- `alias`: Display name (e.g., 'Rust Expert Developer')
+- `type`: Must be 'agent'
+- `version`: Version number (e.g., 1)
+- `description`: Description of the agent's expertise
+- `tags`: Array of relevant tags (e.g., ['rust', 'systems-programming', 'memory-safety'])
+- `capabilities`: **Array of exactly 3 bullet points** describing the agent's key abilities. Each capability should be a clear, concise statement of what the agent can do (e.g., ['Full access to local project files', 'Can run MCP tool calls', 'Ideal for: UI kits, API kits, utils'])
+- `executionNotes`: (Optional) Notes about how this agent executes tasks
+
+**Important**: The `capabilities` field must contain exactly 3 bullet points that clearly describe the agent's key abilities. Do not leave it empty or with fewer than 3 items.
+

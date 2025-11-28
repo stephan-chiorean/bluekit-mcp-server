@@ -13,6 +13,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.23.0",
     "js-yaml": "^4.1.1"
   },
   "devDependencies": {

@@ -54,3 +54,15 @@ export interface Blueprint {
   layers: BlueprintLayer[];
 }
 
+// Agent types
+export interface Agent {
+  id: string;
+  alias: string;
+  type: 'agent';
+  version: number;
+  description: string;
+  tags: string[];
+  capabilities: string[];
+  executionNotes?: string;
+}
+

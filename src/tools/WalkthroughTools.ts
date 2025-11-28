@@ -1,36 +1,23 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
-import { loadPrompt } from '../promptLoader.js';
 import { ToolDefinition, ToolHandler } from '../types.js';
 import { BaseToolSet } from './BaseToolSet.js';
 
 export class WalkthroughTools extends BaseToolSet {
-  private readonly walkthroughDefinition: string;
-
   constructor() {
     super();
-    this.walkthroughDefinition = loadPrompt('get-walkthrough-definition.md');
   }
 
   protected createToolDefinitions(): ToolDefinition[] {
     return [
       {
-        name: 'bluekit.walkthrough.getWalkthroughDefinition',
-        description: 'Get the full Walkthrough Definition text',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-          required: []
-        }
-      },
-      {
-        name: 'bluekit.walkthrough.generateWalkthrough',
-        description: 'Generate a walkthrough file in the .bluekit directory of the specified project path with the generated content. Use bluekit.walkthrough.getWalkthroughDefinition to get the walkthrough definition for context, then generate the walkthrough content and use this tool to save it.',
+        name: 'bluekit_walkthrough_generateWalkthrough',
+        description: 'Generate a walkthrough file in the .bluekit directory of the specified project path with the generated content. Read the walkthrough definition from MCP resources (bluekit://prompts/get-walkthrough-definition.md) for context, then generate the walkthrough content and use this tool to save it.',
         inputSchema: {
           type: 'object',
           properties: {
-            name: { 
+            name: {
               type: 'string',
               description: 'Name of the walkthrough'
             },
@@ -51,24 +38,22 @@ export class WalkthroughTools extends BaseToolSet {
 
   protected createToolHandlers(): Record<string, ToolHandler> {
     return {
-      'bluekit.walkthrough.getWalkthroughDefinition': () => this.handleGetWalkthroughDefinition(),
-      'bluekit.walkthrough.generateWalkthrough': (params) => this.handleGenerateWalkthrough(params)
+      'bluekit_walkthrough_generateWalkthrough': (params) => this.handleGenerateWalkthrough(params)
     };
   }
 
-  private handleGetWalkthroughDefinition(): Array<{ type: 'text'; text: string }> {
-    return [
-      { type: 'text', text: this.walkthroughDefinition }
-    ];
-  }
-
   private handleGenerateWalkthrough(params: Record<string, unknown>): Array<{ type: 'text'; text: string }> {
+    // Debug: log what we actually received
+    console.error('[WalkthroughTools] Received params:', JSON.stringify(params, null, 2));
+    console.error('[WalkthroughTools] params.name type:', typeof params.name);
+    console.error('[WalkthroughTools] params.name value:', params.name);
+
     const name = params.name as string;
     const content = params.content as string;
     const projectPath = params.projectPath as string;
-    
+
     if (!name || typeof name !== 'string') {
-      throw new Error('name is required and must be a string');
+      throw new Error(`name is required and must be a string (got: ${typeof name}, value: ${JSON.stringify(name)})`);
     }
 
     if (!content || typeof content !== 'string') {

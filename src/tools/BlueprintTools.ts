@@ -1,17 +1,14 @@
 import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
-import { loadPrompt } from '../promptLoader.js';
 import { ToolDefinition, ToolHandler, Blueprint } from '../types.js';
 import { BaseToolSet } from './BaseToolSet.js';
 
 export class BlueprintTools extends BaseToolSet {
-  private readonly blueprintDefinition: string;
   private readonly blueprintRegistryPath: string;
 
   constructor() {
     super();
-    this.blueprintDefinition = loadPrompt('get-blueprint-definition.md');
     const homeDir = os.homedir();
     const bluekitStoreDir = path.join(homeDir, '.bluekit');
     this.blueprintRegistryPath = path.join(bluekitStoreDir, 'blueprintRegistry.json');
@@ -20,17 +17,8 @@ export class BlueprintTools extends BaseToolSet {
   protected createToolDefinitions(): ToolDefinition[] {
     return [
       {
-        name: 'bluekit.blueprint.getBlueprintDefinition',
-        description: 'Get the full Blueprint Definition text',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-          required: []
-        }
-      },
-      {
-        name: 'bluekit.blueprint.generateBlueprint',
-        description: 'Generate a blueprint JSON file in the global ~/.bluekit/blueprintRegistry.json. Use bluekit.blueprint.getBlueprintDefinition to get the blueprint definition for context, then generate the blueprint JSON object and use this tool to save it.',
+        name: 'bluekit_blueprint_generateBlueprint',
+        description: 'Generate a blueprint JSON file in the global ~/.bluekit/blueprintRegistry.json. Read the blueprint definition from MCP resources (bluekit://prompts/get-blueprint-definition.md) for context, then generate the blueprint JSON object and use this tool to save it.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -43,7 +31,7 @@ export class BlueprintTools extends BaseToolSet {
         }
       },
       {
-        name: 'bluekit.blueprint.listBlueprints',
+        name: 'bluekit_blueprint_listBlueprints',
         description: 'List all blueprints in the global blueprint registry',
         inputSchema: {
           type: 'object',
@@ -52,7 +40,7 @@ export class BlueprintTools extends BaseToolSet {
         }
       },
       {
-        name: 'bluekit.blueprint.getBlueprint',
+        name: 'bluekit_blueprint_getBlueprint',
         description: 'Get a specific blueprint by ID from the global blueprint registry',
         inputSchema: {
           type: 'object',
@@ -70,17 +58,10 @@ export class BlueprintTools extends BaseToolSet {
 
   protected createToolHandlers(): Record<string, ToolHandler> {
     return {
-      'bluekit.blueprint.getBlueprintDefinition': () => this.handleGetBlueprintDefinition(),
-      'bluekit.blueprint.generateBlueprint': (params) => this.handleGenerateBlueprint(params),
-      'bluekit.blueprint.listBlueprints': () => this.handleListBlueprints(),
-      'bluekit.blueprint.getBlueprint': (params) => this.handleGetBlueprint(params)
+      'bluekit_blueprint_generateBlueprint': (params) => this.handleGenerateBlueprint(params),
+      'bluekit_blueprint_listBlueprints': () => this.handleListBlueprints(),
+      'bluekit_blueprint_getBlueprint': (params) => this.handleGetBlueprint(params)
     };
-  }
-
-  private handleGetBlueprintDefinition(): Array<{ type: 'text'; text: string }> {
-    return [
-      { type: 'text', text: this.blueprintDefinition }
-    ];
   }
 
   private handleGenerateBlueprint(params: Record<string, unknown>): Array<{ type: 'text'; text: string }> {

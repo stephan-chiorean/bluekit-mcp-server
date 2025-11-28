@@ -17,7 +17,7 @@ export class CommonTools extends BaseToolSet {
   protected createToolDefinitions(): ToolDefinition[] {
     return [
       {
-        name: 'bluekit.ping',
+        name: 'bluekit_ping',
         description: 'Health check for BlueKit MCP server',
         inputSchema: {
           type: 'object',
@@ -26,7 +26,7 @@ export class CommonTools extends BaseToolSet {
         }
       },
       {
-        name: 'bluekit.batchExecute',
+        name: 'bluekit_batchExecute',
         description: 'Execute multiple tool operations in sequence (single approval)',
         inputSchema: {
           type: 'object',
@@ -69,9 +69,9 @@ export class CommonTools extends BaseToolSet {
 
   protected createToolHandlers(): Record<string, ToolHandler> {
     return {
-      'bluekit.ping': () => this.handlePing(),
-      'bluekit.batchExecute': (params) => this.handleBatchExecute(params),
-      'bluekit.init_project': (params) => this.handleInitProject(params)
+      'bluekit_ping': () => this.handlePing(),
+      'bluekit_batchExecute': (params) => this.handleBatchExecute(params),
+      'bluekit_init_project': (params) => this.handleInitProject(params)
     };
   }
 

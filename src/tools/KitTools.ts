@@ -1,36 +1,23 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
-import { loadPrompt } from '../promptLoader.js';
 import { ToolDefinition, ToolHandler } from '../types.js';
 import { BaseToolSet } from './BaseToolSet.js';
 
 export class KitTools extends BaseToolSet {
-  private readonly kitDefinition: string;
-
   constructor() {
     super();
-    this.kitDefinition = loadPrompt('get-kit-definition.md');
   }
 
   protected createToolDefinitions(): ToolDefinition[] {
     return [
       {
-        name: 'bluekit.kit.getKitDefinition',
-        description: 'Get the full Kit Definition text',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-          required: []
-        }
-      },
-      {
-        name: 'bluekit.kit.generateKit',
-        description: 'Generate a kit file in the .bluekit directory of the specified project path with the generated content. Use bluekit.kit.getKitDefinition to get the kit definition for context, then generate the kit content and use this tool to save it.',
+        name: 'bluekit_kit_generateKit',
+        description: 'Generate a kit file in the .bluekit directory of the specified project path with the generated content. Read the kit definition from MCP resources (bluekit://prompts/get-kit-definition.md) for context, then generate the kit content and use this tool to save it.',
         inputSchema: {
           type: 'object',
           properties: {
-            name: { 
+            name: {
               type: 'string',
               description: 'Name of the kit'
             },
@@ -51,15 +38,8 @@ export class KitTools extends BaseToolSet {
 
   protected createToolHandlers(): Record<string, ToolHandler> {
     return {
-      'bluekit.kit.getKitDefinition': () => this.handleGetKitDefinition(),
-      'bluekit.kit.generateKit': (params) => this.handleGenerateKit(params)
+      'bluekit_kit_generateKit': (params) => this.handleGenerateKit(params)
     };
-  }
-
-  private handleGetKitDefinition(): Array<{ type: 'text'; text: string }> {
-    return [
-      { type: 'text', text: this.kitDefinition }
-    ];
   }
 
   private handleGenerateKit(params: Record<string, unknown>): Array<{ type: 'text'; text: string }> {
