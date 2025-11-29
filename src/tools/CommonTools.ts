@@ -71,7 +71,7 @@ export class CommonTools extends BaseToolSet {
     return {
       'bluekit_ping': () => this.handlePing(),
       'bluekit_batchExecute': (params) => this.handleBatchExecute(params),
-      'bluekit_init_project': (params) => this.handleInitProject(params)
+      'bluekit.init_project': (params) => this.handleInitProject(params)
     };
   }
 
