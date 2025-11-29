@@ -13,7 +13,7 @@ export class WalkthroughTools extends BaseToolSet {
     return [
       {
         name: 'bluekit_walkthrough_generateWalkthrough',
-        description: 'Generate a walkthrough file in the .bluekit directory of the specified project path with the generated content. Read the walkthrough definition from MCP resources (bluekit://prompts/get-walkthrough-definition.md) for context, then generate the walkthrough content and use this tool to save it.',
+        description: 'Generate a walkthrough file in the .bluekit directory of the specified project path with the generated content. Read the walkthrough definition from MCP resources (bluekit://prompts/get-walkthrough-definition.md) for principles, then tailor the structure and detail level based on the complexity and format parameters. Adapt your approach: simple formats should be concise and direct, comprehensive formats should be detailed and thorough.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -28,6 +28,16 @@ export class WalkthroughTools extends BaseToolSet {
             projectPath: {
               type: 'string',
               description: 'Path to the project directory where the walkthrough file should be created. The walkthrough will be saved in the .bluekit directory within this project path.'
+            },
+            complexity: {
+              type: 'string',
+              enum: ['simple', 'moderate', 'comprehensive'],
+              description: 'Complexity level - determines depth and detail. Simple: concise and direct. Moderate: organized sections with examples. Comprehensive: deep dive with multiple sections and detailed analysis. Defaults to moderate if not specified.'
+            },
+            format: {
+              type: 'string',
+              enum: ['reference', 'guide', 'review', 'architecture', 'documentation'],
+              description: 'Walkthrough format type - determines structure and focus. Reference: quick lookup of key patterns/APIs. Guide: how something was built with implementation details. Review: what changed and why (code reviews). Architecture: how components connect and interact. Documentation: general understanding of how code works. Defaults to documentation if not specified.'
             }
           },
           required: ['name', 'content', 'projectPath']
@@ -51,6 +61,8 @@ export class WalkthroughTools extends BaseToolSet {
     const name = params.name as string;
     const content = params.content as string;
     const projectPath = params.projectPath as string;
+    const complexity = (params.complexity as string) || 'moderate';
+    const format = (params.format as string) || 'documentation';
 
     if (!name || typeof name !== 'string') {
       throw new Error(`name is required and must be a string (got: ${typeof name}, value: ${JSON.stringify(name)})`);
@@ -78,16 +90,17 @@ export class WalkthroughTools extends BaseToolSet {
     }
     
     const bluekitDir = path.join(resolvedProjectPath, '.bluekit');
+    const walkthroughsDir = path.join(bluekitDir, 'walkthroughs');
 
     try {
-      if (!fs.existsSync(bluekitDir)) {
-        fs.mkdirSync(bluekitDir, { recursive: true });
+      if (!fs.existsSync(walkthroughsDir)) {
+        fs.mkdirSync(walkthroughsDir, { recursive: true });
       }
 
       // Ensure content has YAML front matter
-      const contentWithFrontMatter = this.ensureYamlFrontMatter(content, name);
+      const contentWithFrontMatter = this.ensureYamlFrontMatter(content, name, complexity, format);
 
-      const walkthroughPath = path.join(bluekitDir, `${name}.md`);
+      const walkthroughPath = path.join(walkthroughsDir, `${name}.md`);
       fs.writeFileSync(walkthroughPath, contentWithFrontMatter, 'utf8');
 
       return [
@@ -104,7 +117,7 @@ export class WalkthroughTools extends BaseToolSet {
   /**
    * Ensures the walkthrough content has YAML front matter. If it doesn't exist, adds a default one.
    */
-  private ensureYamlFrontMatter(content: string, walkthroughName: string): string {
+  private ensureYamlFrontMatter(content: string, walkthroughName: string, complexity: string, format: string): string {
     // Check if content already has YAML front matter
     const frontMatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n/;
     const match = content.match(frontMatterRegex);
@@ -135,6 +148,12 @@ export class WalkthroughTools extends BaseToolSet {
         if (!frontMatter.description) {
           frontMatter.description = '';
         }
+        if (!frontMatter.complexity) {
+          frontMatter.complexity = complexity;
+        }
+        if (!frontMatter.format) {
+          frontMatter.format = format;
+        }
 
         // Reconstruct content with validated front matter
         const validatedFrontMatter = yaml.dump(frontMatter, { lineWidth: -1 }).trim();
@@ -143,18 +162,18 @@ export class WalkthroughTools extends BaseToolSet {
       } catch (error) {
         // If YAML parsing fails, replace with valid front matter
         const bodyContent = content.substring(match[0].length);
-        return this.createDefaultFrontMatter(walkthroughName) + bodyContent;
+        return this.createDefaultFrontMatter(walkthroughName, complexity, format) + bodyContent;
       }
     } else {
       // No front matter exists, add default one
-      return this.createDefaultFrontMatter(walkthroughName) + content;
+      return this.createDefaultFrontMatter(walkthroughName, complexity, format) + content;
     }
   }
 
   /**
    * Creates default YAML front matter for a walkthrough
    */
-  private createDefaultFrontMatter(walkthroughName: string): string {
+  private createDefaultFrontMatter(walkthroughName: string, complexity: string, format: string): string {
     const frontMatter = {
       id: this.generateWalkthroughId(walkthroughName),
       alias: this.formatWalkthroughAlias(walkthroughName),
@@ -162,7 +181,9 @@ export class WalkthroughTools extends BaseToolSet {
       is_base: false,
       version: 1,
       tags: [] as string[],
-      description: ''
+      description: '',
+      complexity: complexity,
+      format: format
     };
 
     const yamlContent = yaml.dump(frontMatter, { lineWidth: -1 }).trim();

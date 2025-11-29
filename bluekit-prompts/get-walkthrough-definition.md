@@ -1,37 +1,47 @@
-A **walkthrough** is a single markdown file that provides a section-by-section, chapter-by-chapter walkthrough for understanding how code works. It can include:
+A **walkthrough** is a markdown document that guides builders through understanding code, systems, or implementations. Think of it as a code notebook—capturing knowledge about how something works in a way that's practical and actionable.
 
-1. **Understanding focus**: Designed to help understand:
-   - How specific code sections work
-   - How different parts of a system interact
-   - The flow of data and logic through an application
-   - Architecture and design patterns used
-   - Step-by-step explanations of complex functionality
+## Core Principles
 
-2. **Section-by-section breakdown**: Organized as:
-   - Chapters or sections that build understanding progressively
-   - Each section explains a specific part of the codebase
-   - Clear progression from basic concepts to advanced details
-   - Code examples with detailed explanations
+1. **Focused**: Addresses a specific topic, system, or question
+2. **Clear progression**: Information flows logically from context to details
+3. **Practical**: Written for builders who need to understand and work with code
+4. **Appropriate depth**: Matches the complexity and format to the use case
 
-3. **Code comprehension**: Helps understand:
-   - What each component does and why
-   - How components connect and interact
-   - The reasoning behind design decisions
-   - Dependencies and relationships between parts
-   - Execution flow and data transformations
+## Common Use Cases
 
-4. **AI-agent ready**: Designed to be used with Cursor or similar tools—point the agent at the walkthrough to understand how specific code works.
+- **Understanding existing code**: How a system, feature, or module works
+- **Code reviews**: What changed, why it matters, what to watch for
+- **Architecture documentation**: How components connect and interact
+- **Implementation guides**: How something was built and design decisions made
+- **Quick references**: Key patterns, APIs, or common operations
 
-5. **Complete and educational**: Each walkthrough includes:
-   - Clear explanations of concepts
-   - Code examples with annotations
-   - Visual or textual flow diagrams
-   - Context about why things are structured a certain way
-   - Progressive learning path
+## Structure Guidelines
 
-6. **Project-specific understanding**: Focused on understanding existing code—helps developers comprehend how a specific system or feature works.
+The structure should match the need:
 
-In short: a walkthrough is a structured, educational guide for understanding how code works, organized section-by-section and chapter-by-chapter to build comprehensive understanding of a codebase or feature.
+- **Simple**: Direct, concise explanations for straightforward topics
+- **Moderate**: Organized sections with code examples and explanations
+- **Comprehensive**: Deep dives with multiple sections, flow descriptions, and detailed analysis
 
+## What to Include
 
+- Clear explanations of what code does and why
+- Code examples with context
+- How components or systems interact
+- Design decisions and trade-offs
+- Dependencies and relationships
+- Data flow and execution paths
+- Practical insights for working with the code
 
+## What to Avoid
+
+- Generic tutorials disconnected from actual code
+- Exercises or learning checkpoints (this is documentation, not coursework)
+- Overly academic explanations without practical context
+- Unnecessary complexity when simplicity serves better
+
+## AI-Agent Ready
+
+Walkthroughs should be useful for AI coding assistants—clear enough that an agent can read the walkthrough and understand how to work with the code.
+
+**In short**: A walkthrough is a practical code notebook that helps builders understand how something works, with structure and depth tailored to the specific need.

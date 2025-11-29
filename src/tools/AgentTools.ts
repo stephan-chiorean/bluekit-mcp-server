@@ -68,16 +68,17 @@ export class AgentTools extends BaseToolSet {
     }
     
     const bluekitDir = path.join(resolvedProjectPath, '.bluekit');
+    const agentsDir = path.join(bluekitDir, 'agents');
 
     try {
-      if (!fs.existsSync(bluekitDir)) {
-        fs.mkdirSync(bluekitDir, { recursive: true });
+      if (!fs.existsSync(agentsDir)) {
+        fs.mkdirSync(agentsDir, { recursive: true });
       }
 
       // Ensure content has YAML front matter with type: agent
       const contentWithFrontMatter = this.ensureYamlFrontMatter(content, name);
 
-      const agentPath = path.join(bluekitDir, `${name}.md`);
+      const agentPath = path.join(agentsDir, `${name}.md`);
       fs.writeFileSync(agentPath, contentWithFrontMatter, 'utf8');
 
       return [

@@ -73,16 +73,17 @@ export class KitTools extends BaseToolSet {
     }
     
     const bluekitDir = path.join(resolvedProjectPath, '.bluekit');
+    const kitsDir = path.join(bluekitDir, 'kits');
 
     try {
-      if (!fs.existsSync(bluekitDir)) {
-        fs.mkdirSync(bluekitDir, { recursive: true });
+      if (!fs.existsSync(kitsDir)) {
+        fs.mkdirSync(kitsDir, { recursive: true });
       }
 
       // Ensure content has YAML front matter
       const contentWithFrontMatter = this.ensureYamlFrontMatter(content, name);
 
-      const kitPath = path.join(bluekitDir, `${name}.md`);
+      const kitPath = path.join(kitsDir, `${name}.md`);
       fs.writeFileSync(kitPath, contentWithFrontMatter, 'utf8');
 
       return [
