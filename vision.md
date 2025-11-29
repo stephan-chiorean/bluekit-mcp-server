@@ -14,33 +14,43 @@ This doesn't scale. We need intelligence.
 ## The Vision
 
 **An AI orchestration layer that automatically:**
-1. Analyzes available kits (local + global registry)
+1. Analyzes available kits and patterns (local + global registry)
 2. Understands user goals ("build a payment system")
-3. Detects gaps (missing kits, outdated kits, incompatible versions)
-4. Generates or adapts kits as needed
+3. Detects gaps (missing patterns, outdated templates, incompatible versions)
+4. Generates blueprint-specific tasks as needed
 5. Determines dependencies and execution order
 6. Builds optimized blueprints with proper layering and parallelization
 7. Executes the plan with real-time adaptation
 
 ## Core Concepts
 
-### Kits: Atomic Executable Units
-- A single, containerized task (e.g., "setup PostgreSQL", "create login form", "configure Stripe")
-- Self-contained with all instructions, code, and structure
-- Technology-agnostic and reusable
+### Kits: Reusable Development Units
+- **Self-contained, reusable units** that live in `.bluekit/` root directory
+- Can be referenced and used across multiple projects
+- Examples: "PostgreSQL setup template", "Auth boilerplate", "Stripe integration pattern"
+- Technology-agnostic and version-controlled
 - **Enhanced with dependency metadata** for intelligent orchestration
 
+### Tasks: Blueprint-Specific Instructions
+- **Blueprint-specific instructions** that live only within a blueprint folder (`.bluekit/blueprints/{id}/`)
+- Generated as part of a blueprint and customized for that specific use case
+- NOT reusable across projects - they're tailored to the blueprint's context
+- Examples: "Setup PostgreSQL for this payment system", "Create login form with our brand styling"
+- Tasks are the atomic units that blueprints orchestrate
+
 ### Blueprints: Intelligent Execution Plans
-- Multi-kit, multi-agent workflows
+- **Generate tasks** (not execute existing kits) and organize them into layers
+- Stored as folders: `.bluekit/blueprints/{id}/` containing `blueprint.json` and task `.md` files
 - **Layered execution** - sequential layers where each layer completes before the next
 - **Parallel execution** - within a layer, independent tasks run concurrently
 - **Dependency-aware** - automatically ordered based on what requires what
 - **Adaptive** - can be regenerated if conditions change
 
-### Agents: Expert Personas
-- Define HOW an expert thinks when executing kits
-- Matched to kits based on capabilities and domain expertise
-- Multiple agents can work in parallel on different kits
+### Agents: Expert Personas (Future)
+- Define HOW an expert thinks when executing tasks
+- Matched to tasks based on capabilities and domain expertise
+- Multiple agents can work in parallel on different tasks
+- **Not implemented yet** - currently blueprints just generate tasks without agent execution
 
 ### Orchestrator: The Intelligent Layer
 - NEW: An AI agent that sits above everything
@@ -57,9 +67,9 @@ This doesn't scale. We need intelligence.
                   ▼
 ┌─────────────────────────────────────────┐
 │      ORCHESTRATOR AGENT (AI)             │
-│  - Analyzes available kits               │
+│  - Analyzes available kits/patterns      │
 │  - Detects gaps                          │
-│  - Generates missing kits                │
+│  - Generates blueprint-specific tasks    │
 │  - Resolves dependencies                 │
 │  - Creates optimized blueprint           │
 └─────────────────┬───────────────────────┘
@@ -67,24 +77,25 @@ This doesn't scale. We need intelligence.
                   ▼
 ┌─────────────────────────────────────────┐
 │          BLUEPRINT (Generated)           │
+│  Folder: .bluekit/blueprints/{id}/       │
 │                                          │
 │  Layer 1 (Foundation):                   │
-│    - [database-setup] → backend-ops      │
-│    - [env-config] → devops               │
+│    - database-setup.md (task)            │
+│    - env-config.md (task)                │
 │    (parallel execution ↕)                │
 │                                          │
 │  Layer 2 (Core Services):                │
-│    - [auth-api] → backend-dev            │
-│    - [payment-api] → backend-dev         │
+│    - auth-api.md (task)                  │
+│    - payment-api.md (task)               │
 │    (parallel execution ↕)                │
 │                                          │
 │  Layer 3 (Integration):                  │
-│    - [connect-frontend-backend] → fullstack│
+│    - connect-frontend-backend.md (task)  │
 └─────────────────┬───────────────────────┘
                   │
                   ▼
 ┌─────────────────────────────────────────┐
-│         EXECUTION ENGINE                 │
+│         EXECUTION ENGINE (Future)        │
 │  - Runs layers sequentially              │
 │  - Runs tasks within layers in parallel  │
 │  - Monitors progress & adapts            │
@@ -121,11 +132,11 @@ tags: ['backend', 'auth', 'api']
 **Goal**: Automatically determine execution order
 
 **New Tools**:
-- `bluekit_analyze_dependencies` - Parse kits and build dependency graph
+- `bluekit_analyze_dependencies` - Parse tasks and build dependency graph
 - `bluekit_blueprint_validatePlan` - Check if execution plan is valid
 
 **Core Algorithm**:
-1. Parse all selected kits
+1. Parse all generated tasks
 2. Build directed acyclic graph (DAG) of dependencies
 3. Topological sort to determine layer ordering
 4. Within each layer, identify parallelizable tasks
@@ -135,15 +146,15 @@ tags: ['backend', 'auth', 'api']
 **Goal**: Identify missing pieces and create them
 
 **New Tools**:
-- `bluekit_analyze_goal` - Analyze user goal and suggest kit strategy
-- `bluekit_gap_detect` - Compare goal vs available kits, find gaps
-- `bluekit_gap_fill` - Generate missing kits or adapt existing ones
+- `bluekit_analyze_goal` - Analyze user goal and suggest task strategy
+- `bluekit_gap_detect` - Compare goal vs available patterns, find gaps
+- `bluekit_task_generate` - Generate blueprint-specific tasks
 
 **Intelligence**:
 - Semantic understanding of user goal
-- Matching against kit capabilities
-- Generating new kits when needed
-- Adapting existing kits for new contexts
+- Matching against kit/pattern library
+- Generating new tasks tailored to the blueprint
+- Customizing tasks for specific project contexts
 
 ### Phase 4: Blueprint Generation
 **Goal**: AI creates optimized blueprints
@@ -152,35 +163,29 @@ tags: ['backend', 'auth', 'api']
 - `bluekit_blueprint_generateFromGoal` - AI generates blueprint from user goal
 - `bluekit_blueprint_optimize` - Improve existing blueprint (more parallelization, better agent matching)
 
-**Enhanced Blueprint Structure**:
+**Current Blueprint Structure** (MVP):
 ```json
 {
   "id": "payment-system-v1",
   "name": "Payment System",
   "version": 1,
   "description": "Full payment processing system with Stripe integration",
-  "generatedBy": "orchestrator-agent",
-  "generatedAt": "2025-11-28T...",
+  "createdAt": "2025-11-28T...",
   "layers": [
     {
       "id": "layer-1",
       "order": 1,
       "name": "Foundation",
-      "parallelizable": true,
       "tasks": [
         {
           "id": "task-db",
-          "alias": "Database Setup",
-          "agent": "backend-ops",
-          "kit": "database/postgresql-setup",
-          "reasoning": "Required for all data persistence"
+          "taskFile": "database-setup.md",
+          "description": "PostgreSQL database setup for payment system"
         },
         {
           "id": "task-env",
-          "alias": "Environment Config",
-          "agent": "devops",
-          "kit": "infra/env-config",
-          "reasoning": "Required for API keys and secrets"
+          "taskFile": "env-config.md",
+          "description": "Environment configuration for Stripe keys"
         }
       ]
     },
@@ -188,44 +193,31 @@ tags: ['backend', 'auth', 'api']
       "id": "layer-2",
       "order": 2,
       "name": "Core Services",
-      "parallelizable": true,
-      "dependsOn": ["layer-1"],
       "tasks": [
-        {
-          "id": "task-auth",
-          "alias": "Auth API",
-          "agent": "backend-dev",
-          "kit": "backend/auth-api",
-          "reasoning": "User authentication needed before payments"
-        },
         {
           "id": "task-payment",
-          "alias": "Payment API",
-          "agent": "backend-dev",
-          "kit": "backend/stripe-integration",
-          "reasoning": "Core payment processing logic"
-        }
-      ]
-    },
-    {
-      "id": "layer-3",
-      "order": 3,
-      "name": "Frontend",
-      "parallelizable": false,
-      "dependsOn": ["layer-2"],
-      "tasks": [
-        {
-          "id": "task-ui",
-          "alias": "Payment UI",
-          "agent": "frontend-dev",
-          "kit": "frontend/stripe-checkout-ui",
-          "reasoning": "User interface for payment flow"
+          "taskFile": "stripe-integration.md",
+          "description": "Stripe payment API integration"
         }
       ]
     }
-  ],
+  ]
+}
+```
+
+**Future Enhanced Structure** (with agents & orchestration):
+```json
+{
+  "id": "payment-system-v1",
+  "name": "Payment System",
+  "generatedBy": "orchestrator-agent",
+  "layers": [...],
   "estimatedDuration": "15-20 minutes",
-  "parallelizationFactor": 0.6
+  "parallelizationFactor": 0.6,
+  "agentAssignments": {
+    "task-db": "backend-ops-agent",
+    "task-env": "devops-agent"
+  }
 }
 ```
 
@@ -261,23 +253,26 @@ tags: ['backend', 'auth', 'api']
 User: "Build a payment system"
   ↓
 Orchestrator:
-  1. List available kits → finds 'stripe-integration' but no 'payment-ui'
-  2. Analyze goal → determines need for: DB, API, Frontend
-  3. Detect gaps → missing 'payment-ui' kit
-  4. Generate missing kit → creates 'payment-ui.md'
+  1. Analyze goal → determines need for: DB, API, Frontend
+  2. Check pattern library → finds relevant patterns (Stripe, PostgreSQL, etc.)
+  3. Detect gaps → what's missing for this specific use case
+  4. Generate tasks → creates blueprint-specific task files:
+     - database-setup.md (tailored for payment system)
+     - stripe-integration.md (with specific config)
+     - payment-ui.md (customized for project stack)
   5. Resolve dependencies → DB → API → Frontend
-  6. Create blueprint → 3 layers with proper ordering
+  6. Create blueprint → folder with blueprint.json + all task files
   7. Validate plan → check for circular deps, missing inputs
-  8. Execute blueprint → run layer by layer
-  9. Report results → "Payment system built successfully"
+  8. [Future] Execute blueprint → run layer by layer with agents
+  9. Report results → "Blueprint generated at .bluekit/blueprints/payment-system-v1"
 ```
 
 ### Reasoning Capabilities
 - **Semantic understanding** - "payment system" means Stripe/PayPal, database, checkout UI
-- **Context awareness** - If project uses React, generate React components
-- **Version compatibility** - Don't use React 18 kit if project is on React 17
+- **Context awareness** - If project uses React, generate React-specific tasks
+- **Customization** - Tasks are tailored to the specific project, not generic templates
 - **Optimization** - Maximize parallelization while respecting dependencies
-- **Adaptation** - If a kit fails, try alternative or regenerate
+- **Adaptation** - [Future] If a task fails, regenerate or try alternative approach
 
 ## Key Differentiators
 
@@ -294,41 +289,40 @@ Orchestrator:
 - **After**: Parallel execution within layers, 3-5x faster
 
 ### vs Rigid Systems
-- **Before**: Missing a kit? Execution fails.
-- **After**: Generate the missing kit on the fly, keep going.
+- **Before**: Missing a template? Manual creation required.
+- **After**: Generate customized tasks on the fly, tailored to context.
 
 ## Example Scenarios
 
-### Scenario 1: Full-Stack App from Scratch
+### Scenario 1: Full-Stack App from Scratch (Future Vision)
 ```
 User: "Create a todo app with auth"
 
 Orchestrator:
-  - Searches kits: finds 'react-app-shell', 'node-express-api', 'postgresql-setup', 'jwt-auth'
-  - Gap detection: missing 'todo-crud-api' and 'todo-ui-components'
-  - Generates missing kits
-  - Creates blueprint:
-    Layer 1: [postgresql-setup, env-config] (parallel)
-    Layer 2: [jwt-auth, todo-crud-api] (parallel)
-    Layer 3: [react-app-shell]
-    Layer 4: [todo-ui-components, auth-ui] (parallel)
-    Layer 5: [connect-frontend-backend]
-  - Executes in ~10 minutes instead of hours
+  - Checks pattern library: finds PostgreSQL, JWT, React patterns
+  - Gap detection: need todo-specific CRUD and UI
+  - Generates blueprint with tasks:
+    Layer 1: [postgresql-setup.md, env-config.md] (parallel)
+    Layer 2: [jwt-auth.md, todo-crud-api.md] (parallel)
+    Layer 3: [react-app-shell.md]
+    Layer 4: [todo-ui-components.md, auth-ui.md] (parallel)
+    Layer 5: [integration.md]
+  - Saves to .bluekit/blueprints/todo-app-v1/
+  - [Future] Executes with agents in ~10 minutes
 ```
 
-### Scenario 2: Extending Existing App
+### Scenario 2: Extending Existing App (MVP Available Now)
 ```
 User: "Add Stripe payments to my app"
 
 Orchestrator:
-  - Analyzes existing project structure
-  - Finds existing kits used: 'react-app', 'express-api', 'postgres-db'
-  - Searches for 'stripe' kits: finds 'stripe-integration'
-  - Determines compatibility: Express + React ✓
-  - Creates blueprint:
-    Layer 1: [stripe-integration] (adds to existing API)
-    Layer 2: [stripe-checkout-ui] (adds to existing React app)
-  - Executes and integrates seamlessly
+  - Analyzes existing project structure (Express + React)
+  - Checks Stripe patterns in library
+  - Generates blueprint with customized tasks:
+    Layer 1: [stripe-integration.md] (Express-specific)
+    Layer 2: [stripe-checkout-ui.md] (React-specific)
+  - Saves to .bluekit/blueprints/stripe-payments-v1/
+  - Developer executes tasks manually for now
 ```
 
 ### Scenario 3: Migration/Upgrade
