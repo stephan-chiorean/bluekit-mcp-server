@@ -40,8 +40,26 @@ export class BlueprintTools extends BaseToolSet {
   protected createToolDefinitions(): ToolDefinition[] {
     return [
       {
+        name: 'bluekit_blueprint_planBlueprint',
+        description: 'Plan a blueprint structure by analyzing requirements and ensuring proper layer parallelization. This tool validates layer dependencies and provides warnings/suggestions before generation. Use this BEFORE bluekit_blueprint_generateBlueprint to ensure correct structure.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            description: {
+              type: 'string',
+              description: 'Description of what blueprint to create (e.g., "React + Tauri desktop app with file watching")'
+            },
+            blueprint: {
+              type: 'object',
+              description: 'Proposed blueprint structure with layers and tasks'
+            }
+          },
+          required: ['description', 'blueprint']
+        }
+      },
+      {
         name: 'bluekit_blueprint_generateBlueprint',
-        description: 'Generate a blueprint folder in .bluekit/blueprints/ containing blueprint.json and all task files. Tasks are blueprint-specific instructions (not reusable kits). Optionally save to global registry at ~/.bluekit/blueprintRegistry.json. Read the blueprint definition from MCP resources (bluekit://prompts/get-blueprint-definition.md) for context.',
+        description: 'Generate a blueprint folder in .bluekit/blueprints/ containing blueprint.json and all task files. Tasks are blueprint-specific instructions (not reusable kits). Optionally save to global registry at ~/.bluekit/blueprintRegistry.json. IMPORTANT: Use bluekit_blueprint_planBlueprint first to validate structure. Read the blueprint definition from MCP resources (bluekit://prompts/get-blueprint-definition.md) for context.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -110,10 +128,198 @@ export class BlueprintTools extends BaseToolSet {
 
   protected createToolHandlers(): Record<string, ToolHandler> {
     return {
+      'bluekit_blueprint_planBlueprint': (params) => this.handlePlanBlueprint(params),
       'bluekit_blueprint_generateBlueprint': (params) => this.handleGenerateBlueprint(params),
       'bluekit_blueprint_listBlueprints': (params) => this.handleListBlueprints(params),
       'bluekit_blueprint_getBlueprint': (params) => this.handleGetBlueprint(params)
     };
+  }
+
+  private handlePlanBlueprint(params: Record<string, unknown>): Array<{ type: 'text'; text: string }> {
+    const description = params.description as string;
+    const blueprint = params.blueprint as BlueprintMetadata;
+
+    if (!description || typeof description !== 'string') {
+      throw new Error('description is required and must be a string');
+    }
+    if (!blueprint || typeof blueprint !== 'object') {
+      throw new Error('blueprint is required and must be an object');
+    }
+
+    // Validate blueprint structure
+    if (!Array.isArray(blueprint.layers) || blueprint.layers.length === 0) {
+      throw new Error('blueprint.layers is required and must be a non-empty array');
+    }
+
+    // Analyze layers for parallelization issues
+    const analysis = this.analyzeBlueprintLayers(blueprint);
+
+    let response = `Blueprint Plan Analysis\n`;
+    response += `========================\n\n`;
+    response += `Description: ${description}\n`;
+    response += `Layers: ${blueprint.layers.length}\n`;
+    response += `Total Tasks: ${blueprint.layers.reduce((sum, layer) => sum + (layer.tasks?.length || 0), 0)}\n\n`;
+
+    if (analysis.errors.length > 0) {
+      response += `❌ ERRORS (Must Fix):\n`;
+      response += `${'='.repeat(50)}\n`;
+      for (const error of analysis.errors) {
+        response += `\n${error}\n`;
+      }
+      response += `\n`;
+    }
+
+    if (analysis.warnings.length > 0) {
+      response += `⚠️  WARNINGS (Review Recommended):\n`;
+      response += `${'='.repeat(50)}\n`;
+      for (const warning of analysis.warnings) {
+        response += `\n${warning}\n`;
+      }
+      response += `\n`;
+    }
+
+    if (analysis.suggestions.length > 0) {
+      response += `💡 SUGGESTIONS (Optimization):\n`;
+      response += `${'='.repeat(50)}\n`;
+      for (const suggestion of analysis.suggestions) {
+        response += `\n${suggestion}\n`;
+      }
+      response += `\n`;
+    }
+
+    if (analysis.errors.length === 0 && analysis.warnings.length === 0) {
+      response += `✅ Blueprint structure looks good!\n`;
+      response += `All layers pass parallelization validation.\n`;
+      response += `Ready to proceed with bluekit_blueprint_generateBlueprint.\n`;
+    } else if (analysis.errors.length === 0) {
+      response += `⚠️  Blueprint has warnings but no errors.\n`;
+      response += `You can proceed with generation, but consider reviewing warnings.\n`;
+    } else {
+      response += `❌ Blueprint has errors that must be fixed before generation.\n`;
+      response += `Please restructure layers to eliminate dependencies within each layer.\n`;
+    }
+
+    return [{ type: 'text', text: response }];
+  }
+
+  private analyzeBlueprintLayers(blueprint: BlueprintMetadata): {
+    errors: string[];
+    warnings: string[];
+    suggestions: string[];
+  } {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const suggestions: string[] = [];
+
+    // Common dependency keywords that suggest sequential execution
+    const dependencyKeywords = [
+      { pattern: /create.*project|init.*project|setup.*project/i, dependsOn: null, provides: 'project-structure' },
+      { pattern: /config|configure/i, dependsOn: 'project-structure', provides: 'configuration' },
+      { pattern: /install.*dep|dep.*install|npm install|yarn install/i, dependsOn: 'project-structure', provides: 'dependencies' },
+      { pattern: /module|struct/i, dependsOn: null, provides: 'modules' },
+      { pattern: /main\.rs|main\.ts|index\.|entry/i, dependsOn: 'modules', provides: 'entry-point' },
+      { pattern: /rust.*command|backend.*command|ipc.*handler/i, dependsOn: 'modules', provides: 'backend-api' },
+      { pattern: /typescript.*wrapper|frontend.*wrapper|client.*wrapper/i, dependsOn: 'backend-api', provides: 'frontend-client' },
+      { pattern: /integration|connect|wire/i, dependsOn: 'frontend-client', provides: 'integration' }
+    ];
+
+    for (const layer of blueprint.layers) {
+      if (!Array.isArray(layer.tasks)) {
+        errors.push(`Layer ${layer.order} (${layer.name}): tasks must be an array`);
+        continue;
+      }
+
+      if (layer.tasks.length === 0) {
+        warnings.push(`Layer ${layer.order} (${layer.name}): empty layer - consider removing`);
+        continue;
+      }
+
+      // Analyze tasks within the layer for potential dependencies
+      const layerProvides = new Set<string>();
+      const layerRequires = new Set<string>();
+
+      for (const task of layer.tasks) {
+        const taskDesc = `${task.taskFile} - ${task.description}`.toLowerCase();
+
+        for (const keyword of dependencyKeywords) {
+          if (keyword.pattern.test(taskDesc)) {
+            if (keyword.provides) layerProvides.add(keyword.provides);
+            if (keyword.dependsOn) layerRequires.add(keyword.dependsOn);
+          }
+        }
+      }
+
+      // Check if layer both requires and provides - sign of internal dependency
+      const intersection = Array.from(layerProvides).filter(x => layerRequires.has(x));
+      if (intersection.length > 0) {
+        errors.push(
+          `Layer ${layer.order} (${layer.name}): Contains tasks with dependencies on each other.\n` +
+          `  Detected dependency chain: ${intersection.join(', ')}\n` +
+          `  Tasks in this layer:\n` +
+          layer.tasks.map(t => `    - ${t.taskFile}: ${t.description}`).join('\n') +
+          `\n  FIX: Split into separate layers OR consolidate into a single comprehensive task.`
+        );
+      }
+
+      // Check for specific anti-patterns
+      if (layer.tasks.length > 1) {
+        const taskDescriptions = layer.tasks.map(t => t.description.toLowerCase());
+
+        // Pattern: "create X" + "configure X" in same layer
+        const hasCreate = taskDescriptions.some(d => /create|init|setup/.test(d));
+        const hasConfigure = taskDescriptions.some(d => /config|configure|settings/.test(d));
+        if (hasCreate && hasConfigure) {
+          errors.push(
+            `Layer ${layer.order} (${layer.name}): Contains both creation AND configuration tasks.\n` +
+            `  This violates parallelization - configuration depends on creation.\n` +
+            `  FIX: Either split into 2 layers OR combine into 1 comprehensive "setup" task.`
+          );
+        }
+
+        // Pattern: "modules" + "main entry" in same layer
+        const hasModules = taskDescriptions.some(d => /module|struct/i.test(d));
+        const hasMain = taskDescriptions.some(d => /main\.|entry|index\./i.test(d));
+        if (hasModules && hasMain) {
+          errors.push(
+            `Layer ${layer.order} (${layer.name}): Contains both module creation AND main entry.\n` +
+            `  Main entry imports modules - they cannot be in the same layer.\n` +
+            `  FIX: Split into 2 layers OR combine into 1 comprehensive "backend foundation" task.`
+          );
+        }
+
+        // Pattern: "backend API" + "frontend wrapper" in same layer
+        const hasBackendAPI = taskDescriptions.some(d => /rust.*command|backend|ipc.*handler/i.test(d));
+        const hasFrontendWrapper = taskDescriptions.some(d => /typescript.*wrapper|frontend.*wrapper|client/i.test(d));
+        if (hasBackendAPI && hasFrontendWrapper) {
+          errors.push(
+            `Layer ${layer.order} (${layer.name}): Contains both backend API AND frontend wrappers.\n` +
+            `  Frontend wrappers depend on backend API signatures.\n` +
+            `  FIX: Split into 2 layers OR combine into 1 comprehensive "IPC system" task.`
+          );
+        }
+      }
+
+      // Suggestions for optimization
+      if (layer.tasks.length === 1 && blueprint.layers.length > 1) {
+        const nextLayer = blueprint.layers.find(l => l.order === layer.order + 1);
+        if (nextLayer && nextLayer.tasks.length === 1) {
+          suggestions.push(
+            `Layers ${layer.order} and ${layer.order + 1}: Both have single tasks.\n` +
+            `  Consider: Could these be combined into one comprehensive task?`
+          );
+        }
+      }
+
+      if (layer.tasks.length > 5) {
+        warnings.push(
+          `Layer ${layer.order} (${layer.name}): Contains ${layer.tasks.length} tasks.\n` +
+          `  Recommendation: If these tasks are truly independent, this is fine.\n` +
+          `  However, consider if some could be consolidated for easier execution.`
+        );
+      }
+    }
+
+    return { errors, warnings, suggestions };
   }
 
   private handleGenerateBlueprint(params: Record<string, unknown>): Array<{ type: 'text'; text: string }> {
@@ -186,6 +392,17 @@ export class BlueprintTools extends BaseToolSet {
       if (!tasks[taskFile]) {
         throw new Error(`Task file "${taskFile}" is referenced in blueprint but not provided in tasks object`);
       }
+    }
+
+    // Run layer parallelization analysis
+    const analysis = this.analyzeBlueprintLayers(blueprint);
+    if (analysis.errors.length > 0) {
+      let errorMsg = '❌ Blueprint has layer parallelization errors:\n\n';
+      for (const error of analysis.errors) {
+        errorMsg += `${error}\n\n`;
+      }
+      errorMsg += 'Please fix these errors before generating. Use bluekit_blueprint_planBlueprint to validate.';
+      throw new Error(errorMsg);
     }
 
     // Resolve absolute project path
