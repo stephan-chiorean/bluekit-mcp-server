@@ -18,3 +18,17 @@ In short:
 
 ➡️ A Kit is the atomic instruction set for a single agent run, containing everything needed to build one modular piece of software.
 
+## YAML Front Matter Structure
+
+Every kit must include YAML front matter with the following fields:
+
+- `id`: Unique identifier (kebab-case, e.g., 'react-form-component')
+- `alias`: Display name (e.g., 'React Form Component')
+- `type`: Must be 'kit'
+- `is_base`: Boolean indicating if this is a base kit (usually false)
+- `version`: Version number (e.g., 1)
+- `tags`: **REQUIRED - Array of 1-3 relevant tags** (e.g., ['react', 'forms', 'typescript']). NEVER leave empty - tags are used for filtering and categorization in the UI.
+- `description`: **REQUIRED - Brief description of what this kit does** (e.g., 'A reusable form component with validation and error handling'). Must be a clear, concise sentence that provides an overview at a glance.
+
+**CRITICAL**: The `tags` and `description` fields MUST ALWAYS be filled out with meaningful content. NEVER generate a kit with empty tags or description. These fields are essential for the UI to function properly.
+

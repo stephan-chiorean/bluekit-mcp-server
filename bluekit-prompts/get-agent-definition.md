@@ -27,10 +27,13 @@ The YAML front matter must include:
 - `alias`: Display name (e.g., 'Rust Expert Developer')
 - `type`: Must be 'agent'
 - `version`: Version number (e.g., 1)
-- `description`: Description of the agent's expertise
-- `tags`: Array of relevant tags (e.g., ['rust', 'systems-programming', 'memory-safety'])
-- `capabilities`: **Array of exactly 3 bullet points** describing the agent's key abilities. Each capability should be a clear, concise statement of what the agent can do (e.g., ['Full access to local project files', 'Can run MCP tool calls', 'Ideal for: UI kits, API kits, utils'])
+- `description`: **REQUIRED - Description of the agent's expertise** (e.g., 'Expert in Rust systems programming with focus on memory safety and performance'). Must be a clear, concise sentence describing what this agent specializes in and provides an overview at a glance.
+- `tags`: **REQUIRED - Array of 1-3 relevant tags** (e.g., ['rust', 'systems-programming', 'memory-safety']). NEVER leave empty - tags are used for filtering and categorization in the UI.
+- `capabilities`: **REQUIRED - Array of exactly 3 bullet points** describing the agent's key abilities. Each capability should be a clear, concise statement of what the agent can do (e.g., ['Full access to local project files', 'Can run MCP tool calls', 'Ideal for: systems kits, performance optimization, low-level programming']). MUST have exactly 3 items.
 - `executionNotes`: (Optional) Notes about how this agent executes tasks
 
-**Important**: The `capabilities` field must contain exactly 3 bullet points that clearly describe the agent's key abilities. Do not leave it empty or with fewer than 3 items.
+**CRITICAL**:
+- The `tags`, `description`, and `capabilities` fields MUST ALWAYS be filled out with meaningful content. NEVER generate an agent with empty tags, description, or capabilities.
+- The `capabilities` field MUST contain exactly 3 bullet points that clearly describe the agent's key abilities.
+- These fields are essential for the UI to function properly - tags for filtering, description for overview, capabilities for understanding what the agent does.
 

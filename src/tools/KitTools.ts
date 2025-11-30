@@ -12,8 +12,26 @@ export class KitTools extends BaseToolSet {
   protected createToolDefinitions(): ToolDefinition[] {
     return [
       {
+        name: 'bluekit_kit_createKit',
+        description: 'Start the process of creating a new kit. This tool provides instructions for generating a kit with all required metadata (tags, description, etc.).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            description: {
+              type: 'string',
+              description: 'User description of what kit they want to create'
+            },
+            projectPath: {
+              type: 'string',
+              description: 'Optional path to the project directory to analyze. If not provided, uses current working directory.'
+            }
+          },
+          required: ['description']
+        }
+      },
+      {
         name: 'bluekit_kit_generateKit',
-        description: 'Generate a kit file in the .bluekit directory of the specified project path with the generated content. Read the kit definition from MCP resources (bluekit://prompts/get-kit-definition.md) for context, then generate the kit content and use this tool to save it.',
+        description: 'Generate a kit file in the .bluekit directory of the specified project path with the generated content. This should be called AFTER creating the kit content with proper YAML front matter including tags (1-3 descriptive tags) and description (clear, concise sentence).',
         inputSchema: {
           type: 'object',
           properties: {
@@ -23,7 +41,7 @@ export class KitTools extends BaseToolSet {
             },
             content: {
               type: 'string',
-              description: 'Kit content (markdown)'
+              description: 'Kit content (markdown with YAML front matter including filled tags and description)'
             },
             projectPath: {
               type: 'string',
@@ -38,8 +56,75 @@ export class KitTools extends BaseToolSet {
 
   protected createToolHandlers(): Record<string, ToolHandler> {
     return {
+      'bluekit_kit_createKit': (params) => this.handleCreateKit(params),
       'bluekit_kit_generateKit': (params) => this.handleGenerateKit(params)
     };
+  }
+
+  private handleCreateKit(params: Record<string, unknown>): Array<{ type: 'text'; text: string }> {
+    const description = params.description as string;
+    const projectPath = (params.projectPath as string) || process.cwd();
+
+    if (!description || typeof description !== 'string') {
+      throw new Error('description is required and must be a string');
+    }
+
+    const instructions = `# Kit Generation Instructions
+
+## User Request
+${description}
+
+## Your Task
+
+Create a complete kit based on the user's description. The kit MUST include proper YAML front matter with ALL required fields filled out:
+
+### Required YAML Front Matter Fields:
+- \`id\`: Unique identifier in kebab-case (e.g., 'react-form-component')
+- \`alias\`: Display name in Title Case (e.g., 'React Form Component')
+- \`type\`: Must be 'kit'
+- \`is_base\`: Usually false
+- \`version\`: Version number (e.g., 1)
+- \`tags\`: **REQUIRED** - Array of 1-3 descriptive tags (e.g., ['react', 'forms', 'typescript'])
+- \`description\`: **REQUIRED** - A clear, concise sentence describing what this kit does (e.g., 'A reusable form component with validation and error handling')
+
+**CRITICAL**: Do NOT leave \`tags\` or \`description\` empty! These fields are essential for:
+- **tags**: Used for filtering and categorization in the UI
+- **description**: Provides an overview of what the kit does at a glance
+
+### Kit Content Guidelines:
+1. Define one coherent unit of work (component, flow, feature, or app)
+2. Include complete instructions, code examples, and structure
+3. Make it technology-agnostic and adaptable with tokens for customization
+4. Ensure it's modular, reusable, and AI-agent ready
+
+### Example YAML Front Matter:
+\`\`\`yaml
+---
+id: react-auth-component
+alias: React Auth Component
+type: kit
+is_base: false
+version: 1
+tags:
+  - react
+  - authentication
+  - typescript
+description: A reusable authentication component with login, logout, and session management
+---
+\`\`\`
+
+## Project Context
+Project path: ${projectPath}
+
+## Next Steps
+
+1. Generate the complete kit content with proper YAML front matter
+2. Ensure tags and description are meaningful and filled out
+3. Use the \`bluekit_kit_generateKit\` tool to save the kit`;
+
+    return [
+      { type: 'text', text: instructions }
+    ];
   }
 
   private handleGenerateKit(params: Record<string, unknown>): Array<{ type: 'text'; text: string }> {
@@ -86,10 +171,14 @@ export class KitTools extends BaseToolSet {
       const kitPath = path.join(kitsDir, `${name}.md`);
       fs.writeFileSync(kitPath, contentWithFrontMatter, 'utf8');
 
+      // Check for empty tags or description and provide warnings
+      const warnings = this.checkMetadataCompleteness(contentWithFrontMatter);
+      const warningText = warnings.length > 0 ? '\n⚠️  ' + warnings.join('\n⚠️  ') : '';
+
       return [
         {
           type: 'text',
-          text: `✅ Generated kit: ${kitPath}`
+          text: `✅ Generated kit: ${kitPath}${warningText}`
         }
       ];
     } catch (error) {
@@ -183,6 +272,34 @@ export class KitTools extends BaseToolSet {
       .split(/[-_\s]+/)
       .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
       .join(' ');
+  }
+
+  /**
+   * Checks if tags and description are properly filled out
+   * Returns an array of warning messages
+   */
+  private checkMetadataCompleteness(content: string): string[] {
+    const warnings: string[] = [];
+    const frontMatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n/;
+    const match = content.match(frontMatterRegex);
+
+    if (match) {
+      try {
+        const frontMatter = yaml.load(match[1]) as Record<string, unknown>;
+
+        if (!Array.isArray(frontMatter.tags) || frontMatter.tags.length === 0) {
+          warnings.push('Tags are empty. Please add at least 1-3 descriptive tags.');
+        }
+
+        if (!frontMatter.description || (typeof frontMatter.description === 'string' && frontMatter.description.trim() === '')) {
+          warnings.push('Description is empty. Please add a brief description of what this kit does.');
+        }
+      } catch (error) {
+        // Ignore YAML parsing errors here since they would have been caught earlier
+      }
+    }
+
+    return warnings;
   }
 }
 

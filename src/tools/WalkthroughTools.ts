@@ -12,8 +12,36 @@ export class WalkthroughTools extends BaseToolSet {
   protected createToolDefinitions(): ToolDefinition[] {
     return [
       {
+        name: 'bluekit_walkthrough_createWalkthrough',
+        description: 'Start the process of creating a new walkthrough. This tool provides instructions for generating a walkthrough with all required metadata (tags, description, etc.).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            description: {
+              type: 'string',
+              description: 'User description of what walkthrough they want to create'
+            },
+            projectPath: {
+              type: 'string',
+              description: 'Optional path to the project directory to analyze. If not provided, uses current working directory.'
+            },
+            complexity: {
+              type: 'string',
+              enum: ['simple', 'moderate', 'comprehensive'],
+              description: 'Complexity level - determines depth and detail. Simple: concise and direct. Moderate: organized sections with examples. Comprehensive: deep dive with multiple sections and detailed analysis. Defaults to moderate if not specified.'
+            },
+            format: {
+              type: 'string',
+              enum: ['reference', 'guide', 'review', 'architecture', 'documentation'],
+              description: 'Walkthrough format type - determines structure and focus. Reference: quick lookup of key patterns/APIs. Guide: how something was built with implementation details. Review: what changed and why (code reviews). Architecture: how components connect and interact. Documentation: general understanding of how code works. Defaults to documentation if not specified.'
+            }
+          },
+          required: ['description']
+        }
+      },
+      {
         name: 'bluekit_walkthrough_generateWalkthrough',
-        description: 'Generate a walkthrough file in the .bluekit directory of the specified project path with the generated content. Read the walkthrough definition from MCP resources (bluekit://prompts/get-walkthrough-definition.md) for principles, then tailor the structure and detail level based on the complexity and format parameters. Adapt your approach: simple formats should be concise and direct, comprehensive formats should be detailed and thorough.',
+        description: 'Generate a walkthrough file in the .bluekit directory of the specified project path with the generated content. This should be called AFTER creating the walkthrough content with proper YAML front matter including tags (1-3 descriptive tags) and description (clear, concise sentence).',
         inputSchema: {
           type: 'object',
           properties: {
@@ -23,7 +51,7 @@ export class WalkthroughTools extends BaseToolSet {
             },
             content: {
               type: 'string',
-              description: 'Walkthrough content (markdown)'
+              description: 'Walkthrough content (markdown with YAML front matter including filled tags and description)'
             },
             projectPath: {
               type: 'string',
@@ -48,8 +76,96 @@ export class WalkthroughTools extends BaseToolSet {
 
   protected createToolHandlers(): Record<string, ToolHandler> {
     return {
+      'bluekit_walkthrough_createWalkthrough': (params) => this.handleCreateWalkthrough(params),
       'bluekit_walkthrough_generateWalkthrough': (params) => this.handleGenerateWalkthrough(params)
     };
+  }
+
+  private handleCreateWalkthrough(params: Record<string, unknown>): Array<{ type: 'text'; text: string }> {
+    const description = params.description as string;
+    const projectPath = (params.projectPath as string) || process.cwd();
+    const complexity = (params.complexity as string) || 'moderate';
+    const format = (params.format as string) || 'documentation';
+
+    if (!description || typeof description !== 'string') {
+      throw new Error('description is required and must be a string');
+    }
+
+    const instructions = `# Walkthrough Generation Instructions
+
+## User Request
+${description}
+
+## Your Task
+
+Create a complete walkthrough based on the user's description. The walkthrough MUST include proper YAML front matter with ALL required fields filled out:
+
+### Required YAML Front Matter Fields:
+- \`id\`: Unique identifier in kebab-case (e.g., 'authentication-flow')
+- \`alias\`: Display name in Title Case (e.g., 'Authentication Flow')
+- \`type\`: Must be 'walkthrough'
+- \`is_base\`: Usually false
+- \`version\`: Version number (e.g., 1)
+- \`tags\`: **REQUIRED** - Array of 1-3 descriptive tags (e.g., ['authentication', 'security', 'react'])
+- \`description\`: **REQUIRED** - A clear, concise sentence describing what this walkthrough covers (e.g., 'Understanding the OAuth2 authentication flow implementation')
+- \`complexity\`: '${complexity}'
+- \`format\`: '${format}'
+
+**CRITICAL**: Do NOT leave \`tags\` or \`description\` empty! These fields are essential for:
+- **tags**: Used for filtering and categorization in the UI
+- **description**: Provides an overview of what the walkthrough covers at a glance
+
+### Walkthrough Content Guidelines:
+1. **Focused**: Address a specific topic, system, or question
+2. **Clear progression**: Information flows logically from context to details
+3. **Practical**: Written for builders who need to understand and work with code
+4. **Appropriate depth**: Match the complexity (${complexity}) and format (${format}) to the use case
+
+### Complexity Guidelines:
+- **Simple**: Direct, concise explanations for straightforward topics
+- **Moderate**: Organized sections with code examples and explanations
+- **Comprehensive**: Deep dives with multiple sections, flow descriptions, and detailed analysis
+
+### Format Guidelines:
+- **Reference**: Quick lookup of key patterns, APIs, or common operations
+- **Guide**: How something was built with implementation details and design decisions
+- **Review**: What changed, why it matters, what to watch for (code reviews)
+- **Architecture**: How components connect and interact, system structure
+- **Documentation**: General understanding of how code works
+
+### Example YAML Front Matter:
+\`\`\`yaml
+---
+id: oauth2-auth-flow
+alias: OAuth2 Authentication Flow
+type: walkthrough
+is_base: false
+version: 1
+tags:
+  - authentication
+  - oauth2
+  - security
+description: Understanding the OAuth2 authentication flow implementation with token refresh
+complexity: moderate
+format: architecture
+---
+\`\`\`
+
+## Project Context
+Project path: ${projectPath}
+Complexity: ${complexity}
+Format: ${format}
+
+## Next Steps
+
+1. Generate the complete walkthrough content with proper YAML front matter
+2. Ensure tags and description are meaningful and filled out
+3. Tailor the structure and detail level to match the complexity and format parameters
+4. Use the \`bluekit_walkthrough_generateWalkthrough\` tool to save the walkthrough`;
+
+    return [
+      { type: 'text', text: instructions }
+    ];
   }
 
   private handleGenerateWalkthrough(params: Record<string, unknown>): Array<{ type: 'text'; text: string }> {
@@ -103,10 +219,14 @@ export class WalkthroughTools extends BaseToolSet {
       const walkthroughPath = path.join(walkthroughsDir, `${name}.md`);
       fs.writeFileSync(walkthroughPath, contentWithFrontMatter, 'utf8');
 
+      // Check for empty tags or description and provide warnings
+      const warnings = this.checkMetadataCompleteness(contentWithFrontMatter);
+      const warningText = warnings.length > 0 ? '\n⚠️  ' + warnings.join('\n⚠️  ') : '';
+
       return [
         {
           type: 'text',
-          text: `✅ Generated walkthrough: ${walkthroughPath}`
+          text: `✅ Generated walkthrough: ${walkthroughPath}${warningText}`
         }
       ];
     } catch (error) {
@@ -208,6 +328,34 @@ export class WalkthroughTools extends BaseToolSet {
       .split(/[-_\s]+/)
       .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
       .join(' ');
+  }
+
+  /**
+   * Checks if tags and description are properly filled out
+   * Returns an array of warning messages
+   */
+  private checkMetadataCompleteness(content: string): string[] {
+    const warnings: string[] = [];
+    const frontMatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n/;
+    const match = content.match(frontMatterRegex);
+
+    if (match) {
+      try {
+        const frontMatter = yaml.load(match[1]) as Record<string, unknown>;
+
+        if (!Array.isArray(frontMatter.tags) || frontMatter.tags.length === 0) {
+          warnings.push('Tags are empty. Please add at least 1-3 descriptive tags.');
+        }
+
+        if (!frontMatter.description || (typeof frontMatter.description === 'string' && frontMatter.description.trim() === '')) {
+          warnings.push('Description is empty. Please add a brief description of what this walkthrough covers.');
+        }
+      } catch (error) {
+        // Ignore YAML parsing errors here since they would have been caught earlier
+      }
+    }
+
+    return warnings;
   }
 }
 

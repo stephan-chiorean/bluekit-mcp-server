@@ -45,3 +45,19 @@ The structure should match the need:
 Walkthroughs should be useful for AI coding assistants—clear enough that an agent can read the walkthrough and understand how to work with the code.
 
 **In short**: A walkthrough is a practical code notebook that helps builders understand how something works, with structure and depth tailored to the specific need.
+
+## YAML Front Matter Structure
+
+Every walkthrough must include YAML front matter with the following fields:
+
+- `id`: Unique identifier (kebab-case, e.g., 'authentication-flow')
+- `alias`: Display name (e.g., 'Authentication Flow')
+- `type`: Must be 'walkthrough'
+- `is_base`: Boolean indicating if this is a base walkthrough (usually false)
+- `version`: Version number (e.g., 1)
+- `tags`: **REQUIRED - Array of 1-3 relevant tags** (e.g., ['authentication', 'security', 'react']). NEVER leave empty - tags are used for filtering and categorization in the UI.
+- `description`: **REQUIRED - Brief description of what this walkthrough covers** (e.g., 'Understanding the OAuth2 authentication flow implementation with token refresh'). Must be a clear, concise sentence that provides an overview at a glance.
+- `complexity`: Complexity level ('simple', 'moderate', or 'comprehensive')
+- `format`: Format type ('reference', 'guide', 'review', 'architecture', or 'documentation')
+
+**CRITICAL**: The `tags` and `description` fields MUST ALWAYS be filled out with meaningful content. NEVER generate a walkthrough with empty tags or description. These fields are essential for the UI to function properly.
