@@ -250,8 +250,9 @@ export class BlueprintTools extends BaseToolSet {
       }
 
       // Check if layer both requires and provides - sign of internal dependency
+      // Only flag as error if there are multiple tasks (single task can't have internal dependencies)
       const intersection = Array.from(layerProvides).filter(x => layerRequires.has(x));
-      if (intersection.length > 0) {
+      if (intersection.length > 0 && layer.tasks.length > 1) {
         errors.push(
           `Layer ${layer.order} (${layer.name}): Contains tasks with dependencies on each other.\n` +
           `  Detected dependency chain: ${intersection.join(', ')}\n` +
