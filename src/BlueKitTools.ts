@@ -8,6 +8,7 @@ import { AgentTools } from './tools/AgentTools.js';
 import { CollectionTools } from './tools/CollectionTools.js';
 import { CommonTools } from './tools/CommonTools.js';
 import { DiagramTools } from './tools/DiagramTools.js';
+import { CloneTools } from './tools/CloneTools.js';
 
 /**
  * Main BlueKitTools class that aggregates all tool sets
@@ -21,6 +22,7 @@ export class BlueKitTools {
   private readonly collectionTools: CollectionTools;
   private readonly commonTools: CommonTools;
   private readonly diagramTools: DiagramTools;
+  private readonly cloneTools: CloneTools;
   private readonly allToolSets: IToolSet[];
 
   constructor() {
@@ -32,6 +34,7 @@ export class BlueKitTools {
     this.collectionTools = new CollectionTools();
     this.commonTools = new CommonTools();
     this.diagramTools = new DiagramTools();
+    this.cloneTools = new CloneTools();
 
     // Set tool sets for batch execution
     this.commonTools.setToolSets([
@@ -42,7 +45,8 @@ export class BlueKitTools {
       this.agentTools,
       this.collectionTools,
       this.commonTools,
-      this.diagramTools
+      this.diagramTools,
+      this.cloneTools
     ]);
 
     this.allToolSets = [
@@ -53,7 +57,8 @@ export class BlueKitTools {
       this.agentTools,
       this.collectionTools,
       this.commonTools,
-      this.diagramTools
+      this.diagramTools,
+      this.cloneTools
     ];
   }
 

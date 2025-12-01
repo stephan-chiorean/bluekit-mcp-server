@@ -29,7 +29,7 @@ export interface ToolDefinition {
   };
 }
 
-export type ToolHandler = (params: Record<string, unknown>) => Array<{ type: 'text'; text: string }>;
+export type ToolHandler = (params: Record<string, unknown>) => Array<{ type: 'text'; text: string }> | Promise<Array<{ type: 'text'; text: string }>>;
 
 // Blueprint types
 export interface BlueprintTask {

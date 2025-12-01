@@ -192,14 +192,23 @@ export class CommonTools extends BaseToolSet {
     }
 
     // Read or create projectRegistry.json
-    let registry: Array<{ id: string; title?: string; description?: string; path: string }> = [];
+    interface ProjectEntry {
+      id: string;
+      title?: string;
+      description?: string;
+      path: string;
+    }
+
+    let registry: ProjectEntry[] = [];
     
     if (fs.existsSync(registryPath)) {
       try {
         const registryContent = fs.readFileSync(registryPath, 'utf8');
-        registry = JSON.parse(registryContent);
+        const parsed = JSON.parse(registryContent);
         
-        if (!Array.isArray(registry)) {
+        if (Array.isArray(parsed)) {
+          registry = parsed;
+        } else {
           registry = [];
         }
       } catch (error) {
@@ -221,7 +230,7 @@ export class CommonTools extends BaseToolSet {
       };
     } else {
       const projectName = path.basename(projectPath);
-      const newProject = {
+      const newProject: ProjectEntry = {
         id: Date.now().toString(),
         title: projectName,
         description: '',

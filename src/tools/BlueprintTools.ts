@@ -1,20 +1,41 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
+import Ajv from 'ajv';
 import { ToolDefinition, ToolHandler } from '../types.js';
 import { BaseToolSet } from './BaseToolSet.js';
+import { SourceResolver } from './SourceResolver.js';
+import { TemplateEngine } from './TemplateEngine.js';
+import { FileOperationsExecutor } from './FileOperations.js';
+
+interface FileOperation {
+  type: 'copy' | 'template' | 'generate';
+  source?: string;      // Template or source path
+  destination: string;  // Output path
+  variables?: string[]; // Variables for templating
+}
 
 interface BlueprintTask {
   id: string;
   taskFile: string;
   description: string;
+  operations?: FileOperation[]; // NEW: File operations
 }
 
 interface BlueprintLayer {
   id: string;
   order: number;
   name: string;
+  classification?: 'foundation' | 'domain' | 'integration' | 'configuration';
   tasks: BlueprintTask[];
+}
+
+interface SourceReference {
+  type: 'local' | 'global' | 'git';
+  path?: string;          // Local path or global registry ID
+  gitUrl?: string;        // Git repository
+  gitRef?: string;        // Branch/tag/commit
+  preservePaths?: string[]; // Files/dirs to copy verbatim
 }
 
 interface BlueprintMetadata {
@@ -24,6 +45,19 @@ interface BlueprintMetadata {
   description: string;
   createdAt: string;
   layers: BlueprintLayer[];
+
+  // NEW: Composition
+  extends?: string;  // Parent blueprint ID
+
+  // NEW: Source references (for copying files)
+  sourceReference?: SourceReference;
+
+  // NEW: Configuration schema
+  configSchema?: {
+    type: 'object';
+    properties: Record<string, any>;
+    required?: string[];
+  };
 }
 
 interface BlueprintGenerateParams {
@@ -33,8 +67,15 @@ interface BlueprintGenerateParams {
 }
 
 export class BlueprintTools extends BaseToolSet {
+  private sourceResolver: SourceResolver;
+  private templateEngine: TemplateEngine;
+  private fileOpsExecutor: FileOperationsExecutor;
+
   constructor() {
     super();
+    this.sourceResolver = new SourceResolver();
+    this.templateEngine = new TemplateEngine();
+    this.fileOpsExecutor = new FileOperationsExecutor(this.sourceResolver, this.templateEngine);
   }
 
   protected createToolDefinitions(): ToolDefinition[] {
@@ -122,6 +163,28 @@ export class BlueprintTools extends BaseToolSet {
           },
           required: ['id']
         }
+      },
+      {
+        name: 'bluekit_blueprint_validateConfig',
+        description: 'Validate an application configuration against a blueprint\'s config schema. Returns validation errors if the config doesn\'t match the schema.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            blueprintId: {
+              type: 'string',
+              description: 'ID of the blueprint to validate against'
+            },
+            config: {
+              type: 'object',
+              description: 'Application configuration to validate'
+            },
+            projectPath: {
+              type: 'string',
+              description: 'Path to the project (optional - searches global registry if not provided)'
+            }
+          },
+          required: ['blueprintId', 'config']
+        }
       }
     ];
   }
@@ -131,7 +194,8 @@ export class BlueprintTools extends BaseToolSet {
       'bluekit_blueprint_planBlueprint': (params) => this.handlePlanBlueprint(params),
       'bluekit_blueprint_generateBlueprint': (params) => this.handleGenerateBlueprint(params),
       'bluekit_blueprint_listBlueprints': (params) => this.handleListBlueprints(params),
-      'bluekit_blueprint_getBlueprint': (params) => this.handleGetBlueprint(params)
+      'bluekit_blueprint_getBlueprint': (params) => this.handleGetBlueprint(params),
+      'bluekit_blueprint_validateConfig': (params) => this.handleValidateConfig(params)
     };
   }
 
@@ -323,7 +387,7 @@ export class BlueprintTools extends BaseToolSet {
     return { errors, warnings, suggestions };
   }
 
-  private handleGenerateBlueprint(params: Record<string, unknown>): Array<{ type: 'text'; text: string }> {
+  private async handleGenerateBlueprint(params: Record<string, unknown>): Promise<Array<{ type: 'text'; text: string }>> {
     const projectPath = params.projectPath as string;
     const blueprint = params.blueprint as BlueprintMetadata;
     const tasks = params.tasks as Record<string, string>;
@@ -395,6 +459,22 @@ export class BlueprintTools extends BaseToolSet {
       }
     }
 
+    // COMPOSITION: Load parent blueprint if extending
+    if (blueprint.extends) {
+      const parent = this.loadBlueprint(blueprint.extends, projectPath);
+
+      // Merge parent layers with child layers
+      // Parent layers come first, child layers are appended
+      blueprint.layers = [...parent.layers, ...blueprint.layers];
+
+      // Inherit source reference if not specified
+      if (!blueprint.sourceReference && parent.sourceReference) {
+        blueprint.sourceReference = parent.sourceReference;
+      }
+
+      console.log(`[BlueprintTools] Extended blueprint "${blueprint.extends}" with ${parent.layers.length} parent layers`);
+    }
+
     // Run layer parallelization analysis
     const analysis = this.analyzeBlueprintLayers(blueprint);
     if (analysis.errors.length > 0) {
@@ -437,6 +517,22 @@ export class BlueprintTools extends BaseToolSet {
         const contentWithFrontMatter = this.addTaskFrontMatter(content, taskFile);
         fs.writeFileSync(taskPath, contentWithFrontMatter, 'utf8');
         taskFiles.push(taskFile);
+      }
+
+      // SOURCE REFERENCE: Resolve and copy preserved paths
+      let sourcePath: string | undefined;
+      if (blueprint.sourceReference) {
+        sourcePath = await this.sourceResolver.resolve(blueprint.sourceReference, resolvedProjectPath);
+        console.log(`[BlueprintTools] Resolved source reference to: ${sourcePath}`);
+
+        if (blueprint.sourceReference.preservePaths && blueprint.sourceReference.preservePaths.length > 0) {
+          await this.sourceResolver.copyPreservedPaths(
+            sourcePath,
+            blueprintFolder,
+            blueprint.sourceReference.preservePaths
+          );
+          console.log(`[BlueprintTools] Copied ${blueprint.sourceReference.preservePaths.length} preserved paths`);
+        }
       }
 
       // Save to global registry if requested
@@ -669,6 +765,109 @@ export class BlueprintTools extends BaseToolSet {
     } catch (error) {
       throw new Error(`Failed to get blueprint: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  }
+
+  /**
+   * Validate an application configuration against a blueprint's config schema
+   */
+  private handleValidateConfig(params: Record<string, unknown>): Array<{ type: 'text'; text: string }> {
+    const blueprintId = params.blueprintId as string;
+    const config = params.config as Record<string, any>;
+    const projectPath = params.projectPath as string | undefined;
+
+    if (!blueprintId || typeof blueprintId !== 'string') {
+      throw new Error('blueprintId is required and must be a string');
+    }
+    if (!config || typeof config !== 'object') {
+      throw new Error('config is required and must be an object');
+    }
+
+    try {
+      // Load the blueprint
+      const blueprint = this.loadBlueprint(blueprintId, projectPath);
+
+      // Check if blueprint has a config schema
+      if (!blueprint.configSchema) {
+        return [
+          {
+            type: 'text',
+            text: `Blueprint "${blueprintId}" does not have a configuration schema.\nNo validation required.`
+          }
+        ];
+      }
+
+      // Validate using Ajv
+      const ajv = new Ajv({ allErrors: true });
+      const validate = ajv.compile(blueprint.configSchema);
+      const valid = validate(config);
+
+      if (valid) {
+        return [
+          {
+            type: 'text',
+            text: `✅ Configuration is valid!\n\nBlueprint: ${blueprint.name}\nNo validation errors found.`
+          }
+        ];
+      } else {
+        // Format validation errors
+        let errorMsg = `❌ Configuration validation failed!\n\n`;
+        errorMsg += `Blueprint: ${blueprint.name}\n\n`;
+        errorMsg += `Errors:\n`;
+
+        if (validate.errors) {
+          for (const error of validate.errors) {
+            const dataPath = error.instancePath || '(root)';
+            const message = error.message || 'Unknown error';
+            errorMsg += `  - ${dataPath}: ${message}\n`;
+            if (error.params && Object.keys(error.params).length > 0) {
+              errorMsg += `    Params: ${JSON.stringify(error.params)}\n`;
+            }
+          }
+        }
+
+        return [
+          {
+            type: 'text',
+            text: errorMsg
+          }
+        ];
+      }
+    } catch (error) {
+      throw new Error(`Failed to validate config: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Load a blueprint by ID from project or global registry
+   */
+  private loadBlueprint(blueprintId: string, projectPath?: string): BlueprintMetadata {
+    let blueprintFolder: string;
+    let blueprintJsonPath: string;
+
+    // First try global registry
+    const registry = this.readGlobalRegistry();
+    const entry = registry[blueprintId];
+
+    if (entry) {
+      blueprintFolder = path.join(entry.projectPath, '.bluekit', 'blueprints', blueprintId);
+      blueprintJsonPath = path.join(blueprintFolder, 'blueprint.json');
+    } else if (projectPath) {
+      // Try project folder
+      const resolvedProjectPath = path.isAbsolute(projectPath)
+        ? path.normalize(projectPath)
+        : path.resolve(process.cwd(), projectPath);
+      blueprintFolder = path.join(resolvedProjectPath, '.bluekit', 'blueprints', blueprintId);
+      blueprintJsonPath = path.join(blueprintFolder, 'blueprint.json');
+    } else {
+      throw new Error(`Blueprint with ID "${blueprintId}" not found`);
+    }
+
+    if (!fs.existsSync(blueprintJsonPath)) {
+      throw new Error(`Blueprint with ID "${blueprintId}" not found`);
+    }
+
+    const content = fs.readFileSync(blueprintJsonPath, 'utf8');
+    return JSON.parse(content) as BlueprintMetadata;
   }
 
   /**

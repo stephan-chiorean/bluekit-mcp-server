@@ -448,8 +448,424 @@ This tool:
 - User asks to execute a specific blueprint task
 - You need full context about a task's role in the blueprint
 
+## Advanced Features: Blueprint Composition
+
+### Exact Clone Mode
+
+The fastest way to create a blueprint from an existing project is to use **Clone Mode**. This automatically analyzes a project and generates a blueprint that can recreate it exactly.
+
+#### Using Clone Mode
+
+```typescript
+bluekit_blueprint_cloneProject({
+  sourcePath: '/path/to/blueKit',
+  blueprintId: 'bluekit-clone-v1',
+  blueprintName: 'BlueKit Clone',
+  description: 'Exact clone of BlueKit project',
+  mode: 'exact',  // 'exact' copies everything verbatim
+  classification: 'foundation',  // For UI color coding
+  saveToGlobal: false
+})
+```
+
+**What it does:**
+1. Scans the source project and catalogs all files
+2. Auto-generates a blueprint with:
+   - Source reference pointing to the source project
+   - Copy operation to preserve all files
+   - Task file with clone instructions
+3. Returns blueprint JSON and task content ready to use
+
+**Output:**
+- Project analysis (file count, size, file types)
+- Complete blueprint JSON
+- Task file content with instructions
+- Ready to save with `bluekit_blueprint_generateBlueprint`
+
+**Layer Classification:**
+Clone mode supports classification for UI visualization:
+- `foundation` - Infrastructure, UI components, generic code (default)
+- `domain` - Business logic, content types, app-specific
+- `integration` - Connects foundation + domain
+- `configuration` - Settings, configs
+
+This enables your UI to **color-code layers** based on their purpose.
+
+**Use Case:**
+1. Point clone tool at blueKit
+2. Get blueprint that preserves everything exactly
+3. Use blueprint to recreate identical project elsewhere
+4. Later, analyze and split into foundation vs. domain layers
+
+### Blueprint Composition (Extending Blueprints)
+
+Blueprints can **extend** other blueprints to create hierarchical composition. This allows you to build generic foundations and add domain-specific layers on top.
+
+**Use Case:** Create a generic `react-tauri-foundation` blueprint, then extend it with domain-specific blueprints like `podcast-app` or `note-taking-app`.
+
+#### Extending a Blueprint
+
+Add the `extends` field to reference a parent blueprint:
+
+```typescript
+{
+  id: 'podcast-app-v1',
+  name: 'Podcast App',
+  version: 1,
+  description: 'Podcast management application',
+  extends: 'react-tauri-foundation-v1',  // Parent blueprint ID
+  layers: [
+    // Child layers are appended AFTER parent layers
+    {
+      id: 'layer-5',
+      order: 5,
+      name: 'Podcast Domain',
+      tasks: [...]
+    }
+  ]
+}
+```
+
+**How it works:**
+1. When generating, the parent blueprint's layers are loaded first
+2. Child blueprint's layers are appended after parent layers
+3. Final blueprint has: `[...parentLayers, ...childLayers]`
+4. Source references are inherited if not specified in child
+
+**Example Hierarchy:**
+```
+react-tauri-foundation-v1 (Layers 1-4)
+├── podcast-app-v1 (adds Layers 5-7)
+├── note-app-v1 (adds Layers 5-6)
+└── task-manager-v1 (adds Layers 5-8)
+```
+
+All three apps share the same foundation (Layers 1-4) but have different domain logic.
+
+### Source References (Preserving Files)
+
+Blueprints can preserve exact files from a source project instead of regenerating them. This is crucial for maintaining UI components, themes, or any code that should be copied verbatim.
+
+**Use Case:** Preserve the exact UI components from an existing project so new apps have identical look and feel.
+
+#### Adding Source References
+
+```typescript
+{
+  id: 'react-tauri-foundation-v1',
+  name: 'React + Tauri Foundation',
+  version: 1,
+  description: 'Generic foundation with preserved UI',
+
+  sourceReference: {
+    type: 'local',                    // 'local', 'global', or 'git'
+    path: '/path/to/source/project',  // Source project path
+    preservePaths: [                  // Files/dirs to copy exactly
+      'src/components/ui',
+      'src/theme',
+      'src/lib/parseFrontMatter.ts',
+      'src/contexts/ColorModeContext.tsx'
+    ]
+  },
+
+  layers: [...]
+}
+```
+
+**Source Reference Types:**
+
+1. **Local** - Copy from a local file path
+```typescript
+sourceReference: {
+  type: 'local',
+  path: '/Users/name/projects/blueKit',
+  preservePaths: ['src/components/ui', 'src/theme']
+}
+```
+
+2. **Global** - Reference a globally registered blueprint
+```typescript
+sourceReference: {
+  type: 'global',
+  path: 'ui-component-library-v1',  // Blueprint ID in global registry
+  preservePaths: ['src/components']
+}
+```
+
+3. **Git** - Clone from a git repository (NOT YET IMPLEMENTED)
+```typescript
+sourceReference: {
+  type: 'git',
+  gitUrl: 'https://github.com/user/repo',
+  gitRef: 'main',
+  preservePaths: ['src/components/ui']
+}
+```
+
+**Preserved paths are copied exactly** - no modifications, no AI generation, just direct file copies.
+
+### File Operations
+
+Tasks can specify file operations to execute during blueprint generation. This enables templating, variable substitution, and automated file generation.
+
+**Three operation types:**
+
+1. **COPY** - Preserve exact files from source
+2. **TEMPLATE** - Generate with variable substitution (Handlebars)
+3. **GENERATE** - AI-generated from patterns (future feature)
+
+#### Adding Operations to Tasks
+
+```typescript
+{
+  id: 'layer-3',
+  order: 3,
+  name: 'Frontend Foundation',
+  tasks: [{
+    id: 'task-frontend',
+    taskFile: 'frontend-foundation.md',
+    description: 'React setup with preserved UI',
+    operations: [
+      {
+        type: 'copy',
+        source: '{{sourceReference}}/src/components/ui',
+        destination: 'src/components/ui'
+      },
+      {
+        type: 'template',
+        source: 'templates/TabContent.tsx.hbs',
+        destination: 'src/components/{{contentType.plural}}/{{ContentType}}TabContent.tsx',
+        variables: ['contentType']
+      }
+    ]
+  }]
+}
+```
+
+#### COPY Operation
+
+Copies files/directories exactly from source to destination.
+
+```typescript
+{
+  type: 'copy',
+  source: '{{sourceReference}}/src/components/ui',  // Can use {{sourceReference}} variable
+  destination: 'src/components/ui'
+}
+```
+
+#### TEMPLATE Operation
+
+Generates files from Handlebars templates with variable substitution.
+
+**Template file** (`templates/TabContent.tsx.hbs`):
+```handlebars
+import { {{pascalCase contentType.name}}List } from './{{pascalCase contentType.name}}List';
+
+export function {{pascalCase contentType.name}}TabContent() {
+  return (
+    <div>
+      <h1>{{contentType.plural}}</h1>
+      <{{pascalCase contentType.name}}List />
+    </div>
+  );
+}
+```
+
+**Operation**:
+```typescript
+{
+  type: 'template',
+  source: 'templates/TabContent.tsx.hbs',
+  destination: 'src/components/{{contentType.plural}}/{{ContentType}}TabContent.tsx',
+  variables: ['contentType']  // Indicates iteration over config.contentTypes
+}
+```
+
+**Available Handlebars helpers:**
+- `{{pascalCase str}}` - PascalCase (e.g., "podcast library" → "PodcastLibrary")
+- `{{camelCase str}}` - camelCase (e.g., "podcast library" → "podcastLibrary")
+- `{{snakeCase str}}` - snake_case (e.g., "podcast library" → "podcast_library")
+- `{{kebabCase str}}` - kebab-case (e.g., "podcast library" → "podcast-library")
+- `{{upperSnakeCase str}}` - UPPER_SNAKE_CASE (e.g., "podcast library" → "PODCAST_LIBRARY")
+- `{{capitalize str}}` - Capitalize first letter
+- `{{lowercase str}}` - Convert to lowercase
+- `{{uppercase str}}` - Convert to uppercase
+- `{{pluralize str}}` - Simple pluralization (adds 's' or 'es')
+- `{{json obj}}` - JSON stringify
+- `{{eq a b}}` - Equality check
+- `{{ne a b}}` - Not equal check
+- `{{gt a b}}` - Greater than check
+- `{{lt a b}}` - Less than check
+
+**Template iteration:**
+If `variables` includes `'contentType'` and the config has a `contentTypes` array, the template generates one file per content type.
+
+### Configuration Schema
+
+Blueprints can define a configuration schema to validate application configurations before generation.
+
+**Use Case:** A domain extension blueprint requires specific config structure (app metadata, content types, UI settings).
+
+#### Adding Config Schema
+
+```typescript
+{
+  id: 'content-management-extension-v1',
+  name: 'Content Management Extension',
+  version: 1,
+  description: 'Configurable content management layer',
+  extends: 'react-tauri-foundation-v1',
+
+  configSchema: {
+    type: 'object',
+    properties: {
+      app: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', pattern: '^[A-Z][a-zA-Z0-9]*$' },
+          displayName: { type: 'string' },
+          baseDirectory: { type: 'string' },
+          identifier: { type: 'string', pattern: '^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)*$' }
+        },
+        required: ['name', 'displayName', 'baseDirectory', 'identifier']
+      },
+      contentTypes: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            plural: { type: 'string' },
+            directory: { type: 'string' },
+            fields: { type: 'array' }
+          },
+          required: ['name', 'plural', 'directory', 'fields']
+        },
+        minItems: 1
+      }
+    },
+    required: ['app', 'contentTypes']
+  },
+
+  layers: [...]
+}
+```
+
+#### Validating Configurations
+
+Use `bluekit_blueprint_validateConfig` to validate a configuration:
+
+```typescript
+bluekit_blueprint_validateConfig({
+  blueprintId: 'content-management-extension-v1',
+  config: {
+    app: {
+      name: 'PodcastLibrary',
+      displayName: 'Podcast Library',
+      baseDirectory: '.podcasts',
+      identifier: 'com.myapp.podcast'
+    },
+    contentTypes: [
+      {
+        name: 'podcast',
+        plural: 'podcasts',
+        directory: 'podcasts',
+        fields: [
+          { name: 'title', type: 'string', required: true }
+        ]
+      }
+    ]
+  }
+})
+```
+
+Returns validation errors if config doesn't match schema.
+
+### Complete Example: Foundation + Extension
+
+**Foundation Blueprint** (react-tauri-foundation-v1):
+```typescript
+{
+  id: 'react-tauri-foundation-v1',
+  name: 'React + Tauri Foundation',
+  version: 1,
+  description: 'Generic foundation with UI preserved from source',
+
+  sourceReference: {
+    type: 'local',
+    path: '/path/to/blueKit',
+    preservePaths: [
+      'src/components/ui',
+      'src/theme'
+    ]
+  },
+
+  layers: [
+    { order: 1, name: 'Project Setup', tasks: [...] },
+    { order: 2, name: 'Backend Foundation', tasks: [...] },
+    {
+      order: 3,
+      name: 'Frontend Foundation',
+      tasks: [{
+        id: 'task-frontend',
+        taskFile: 'frontend-foundation.md',
+        description: 'React setup with preserved UI',
+        operations: [
+          {
+            type: 'copy',
+            source: '{{sourceReference}}/src/components/ui',
+            destination: 'src/components/ui'
+          }
+        ]
+      }]
+    },
+    { order: 4, name: 'IPC System', tasks: [...] }
+  ]
+}
+```
+
+**Domain Extension** (podcast-app-v1):
+```typescript
+{
+  id: 'podcast-app-v1',
+  name: 'Podcast App',
+  version: 1,
+  description: 'Podcast management application',
+  extends: 'react-tauri-foundation-v1',
+
+  configSchema: { /* validation schema */ },
+
+  layers: [
+    {
+      order: 5,
+      name: 'Podcast Domain',
+      tasks: [{
+        id: 'task-models',
+        taskFile: 'domain-models.md',
+        description: 'Generate podcast models',
+        operations: [
+          {
+            type: 'template',
+            source: 'templates/Model.rs.hbs',
+            destination: 'src-tauri/src/models/{{contentType.name}}.rs',
+            variables: ['contentType']
+          }
+        ]
+      }]
+    }
+  ]
+}
+```
+
+**Result:** Podcast app has Layers 1-5, with UI components preserved from blueKit and podcast-specific models generated from templates.
+
 ## Summary
 
 ➡️ A Blueprint is a folder containing a JSON configuration and task markdown files, organizing development work into ordered layers with specific implementation instructions for each step.
 
+➡️ Blueprints support **composition** (extending parent blueprints), **source references** (preserving exact files), **file operations** (templating and generation), and **configuration schemas** (validation).
+
 ➡️ Use `bluekit_task_executeTask` to execute tasks with full blueprint context automatically injected.
+
+➡️ Use `bluekit_blueprint_validateConfig` to validate configurations against blueprint schemas.
