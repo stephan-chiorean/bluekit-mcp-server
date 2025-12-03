@@ -110,6 +110,13 @@ Include:
 - Meaningful arrows and connections
 - Legend or annotations if helpful
 
+### Common Mermaid Syntax Issues to Avoid:
+- **@ symbol in node labels**: The @ symbol at the start of node labels causes parse errors. Use "modelcontextprotocol/sdk" instead of "@modelcontextprotocol/sdk"
+- **Special characters**: Avoid using @, #, $, %, ^, &, *, |, backslash, {, }, [, ], <, > at the start of node labels
+- **Unclosed brackets**: Ensure all node definitions use proper bracket syntax: NodeID[Label] or NodeID(Label) or NodeID{Label}
+- **Invalid edge syntax**: Use proper arrow syntax: -->, -.-->, ==>, --, etc.
+- **Unmatched quotes**: Ensure all quoted strings in labels are properly closed
+
 ### Example YAML Front Matter:
 \`\`\`yaml
 ---
@@ -207,7 +214,25 @@ Project path: ${projectPath}
       }
 
       // Ensure content has YAML front matter
-      const contentWithFrontMatter = this.ensureYamlFrontMatter(content, name);
+      let contentWithFrontMatter = this.ensureYamlFrontMatter(content, name);
+
+      // Validate and fix mermaid syntax
+      const validationResult = this.validateMermaidSyntax(contentWithFrontMatter);
+      
+      // Apply auto-fixes if any were suggested (e.g., @ symbol removal)
+      if (validationResult.fixedContent) {
+        contentWithFrontMatter = validationResult.fixedContent;
+      }
+      
+      // Filter out auto-fixable errors (we've already fixed them)
+      const unfixableErrors = validationResult.errors.filter(e => 
+        !e.includes('@ symbol at start of label')
+      );
+      
+      // Only throw errors for issues we couldn't auto-fix
+      if (unfixableErrors.length > 0) {
+        throw new Error(`Mermaid syntax errors detected:\n${unfixableErrors.join('\n')}\n\nPlease fix these issues before generating the diagram.`);
+      }
 
       const diagramPath = path.join(diagramsDir, `${name}.mmd`);
       fs.writeFileSync(diagramPath, contentWithFrontMatter, 'utf8');
@@ -215,11 +240,19 @@ Project path: ${projectPath}
       // Check for empty tags and description and provide warnings
       const warnings = this.checkMetadataCompleteness(contentWithFrontMatter);
       const warningText = warnings.length > 0 ? '\n⚠️  ' + warnings.join('\n⚠️  ') : '';
+      
+      // Check if we auto-fixed any issues
+      const autoFixedCount = validationResult.errors.filter(e => 
+        e.includes('@ symbol at start of label')
+      ).length;
+      const autoFixText = autoFixedCount > 0 
+        ? `\n🔧 Auto-fixed ${autoFixedCount} mermaid syntax issue(s) (removed @ symbols from node labels).`
+        : '';
 
       return [
         {
           type: 'text',
-          text: `✅ Generated diagram: ${diagramPath}${warningText}`
+          text: `✅ Generated diagram: ${diagramPath}${autoFixText}${warningText}`
         }
       ];
     } catch (error) {
@@ -318,5 +351,129 @@ Project path: ${projectPath}
     }
 
     return warnings;
+  }
+
+  /**
+   * Validates mermaid syntax and detects common parse errors
+   * Returns errors and optionally fixed content
+   */
+  private validateMermaidSyntax(content: string): {
+    errors: string[];
+    fixedContent?: string;
+  } {
+    const errors: string[] = [];
+    let fixedContent = content;
+
+    // Extract mermaid code block
+    const mermaidBlockRegex = /```mermaid\s*\n([\s\S]*?)```/;
+    const mermaidMatch = content.match(mermaidBlockRegex);
+    
+    if (!mermaidMatch) {
+      // Check if content is just mermaid code without markdown code block
+      // In that case, validate the entire content after YAML front matter
+      const frontMatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n/;
+      const frontMatterMatch = content.match(frontMatterRegex);
+      if (frontMatterMatch) {
+        const mermaidCode = content.substring(frontMatterMatch[0].length);
+        return this.validateMermaidCode(mermaidCode, errors, fixedContent);
+      }
+      return { errors: ['No mermaid code block found'] };
+    }
+
+    const mermaidCode = mermaidMatch[1];
+    return this.validateMermaidCode(mermaidCode, errors, fixedContent, mermaidMatch[0]);
+  }
+
+  /**
+   * Validates mermaid code for common syntax errors
+   */
+  private validateMermaidCode(
+    mermaidCode: string,
+    errors: string[],
+    fixedContent: string,
+    originalBlock?: string
+  ): { errors: string[]; fixedContent?: string } {
+    let fixedMermaidCode = mermaidCode;
+    let hasFixes = false;
+
+    // Check for @ symbol at start of node labels (common parse error)
+    // Pattern: NodeID[@something...] - @ at start of label causes parse error
+    const atSymbolPattern = /(\w+)\[(@[^\]]+)\]/g;
+    const atSymbolMatches = Array.from(mermaidCode.matchAll(atSymbolPattern));
+    
+    if (atSymbolMatches.length > 0) {
+      for (const match of atSymbolMatches) {
+        const nodeId = match[1];
+        const label = match[2];
+        const fixedLabel = label.replace(/^@/, ''); // Remove @ from start
+        errors.push(
+          `Line with node "${nodeId}": @ symbol at start of label "${label}" causes parse errors. Use "${fixedLabel}" instead.`
+        );
+        fixedMermaidCode = fixedMermaidCode.replace(match[0], `${nodeId}[${fixedLabel}]`);
+        hasFixes = true;
+      }
+    }
+
+    // Check for other problematic special characters at start of labels
+    const problematicStartChars = /(\w+)\[([#\$%\^\&\*\|\\\{\}\[\]<>][^\]]+)\]/g;
+    const problematicMatches = Array.from(mermaidCode.matchAll(problematicStartChars));
+    
+    if (problematicMatches.length > 0) {
+      for (const match of problematicMatches) {
+        const nodeId = match[1];
+        const label = match[2];
+        errors.push(
+          `Line with node "${nodeId}": Special character at start of label "${label}" may cause parse errors. Consider quoting or escaping.`
+        );
+      }
+    }
+
+    // Check for unclosed brackets in node definitions (more accurate check)
+    const lines = mermaidCode.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      // Look for node definitions with opening bracket but no closing bracket on same line
+      const nodeDefMatch = line.match(/(\w+)\[([^\]]*)$/);
+      if (nodeDefMatch && !line.includes(']')) {
+        // Check if closing bracket exists in next few lines (for multi-line definitions)
+        let foundClosing = false;
+        for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
+          if (lines[j].includes(']')) {
+            foundClosing = true;
+            break;
+          }
+        }
+        if (!foundClosing) {
+          errors.push(`Line ${i + 1}: Potentially unclosed bracket in node definition: "${line}"`);
+        }
+      }
+    }
+
+    // Check for unmatched quotes in labels (simplified check)
+    const singleQuoteCount = (mermaidCode.match(/'/g) || []).length;
+    const doubleQuoteCount = (mermaidCode.match(/"/g) || []).length;
+    if (singleQuoteCount % 2 !== 0) {
+      errors.push('Unmatched single quotes detected in mermaid code');
+    }
+    if (doubleQuoteCount % 2 !== 0) {
+      errors.push('Unmatched double quotes detected in mermaid code');
+    }
+
+    // Apply fixes if any were made
+    if (hasFixes && originalBlock) {
+      fixedContent = fixedContent.replace(originalBlock, `\`\`\`mermaid\n${fixedMermaidCode}\`\`\``);
+    } else if (hasFixes) {
+      // If no original block, we're working with raw mermaid code
+      const frontMatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n/;
+      const frontMatterMatch = fixedContent.match(frontMatterRegex);
+      if (frontMatterMatch) {
+        fixedContent = fixedContent.substring(0, frontMatterMatch[0].length) + fixedMermaidCode;
+      }
+    }
+
+    return {
+      errors,
+      fixedContent: hasFixes ? fixedContent : undefined
+    };
   }
 }
