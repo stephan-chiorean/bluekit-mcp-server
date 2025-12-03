@@ -352,9 +352,19 @@ export interface {Entity} {
 }
 ```
 
-## Step 5: Create Definition Resource (Optional)
+## Step 5: Create Definition Resource (When Needed)
 
-Add `bluekit-prompts/get-{entity}-definition.md`:
+**When to create a definition resource:**
+- Your entity has complex structure or formatting requirements
+- You want Claude to understand specific content guidelines
+- The entity type is new and needs explanation
+
+**When to skip:**
+- Simple entities with straightforward structure
+- Tools that just execute actions (no content generation needed)
+- The create/generate pattern is self-explanatory
+
+If needed, add `bluekit-prompts/get-{entity}-definition.md`:
 
 ```markdown
 # {Entity} Definition
@@ -379,9 +389,9 @@ description: "Brief summary"   # Required: One-line description
 [Explain what should go in the content section]
 ```
 
-## Step 6: Update Server Instructions
+## Step 6: Update Server Instructions (If Definition Resource Created)
 
-Add to `src/main.ts` instructions:
+**Only if you created a definition resource**, add to `src/main.ts` instructions:
 
 ```typescript
 ### To Generate a {Entity}:
@@ -389,6 +399,8 @@ Add to `src/main.ts` instructions:
 2. Generate the {entity} content based on the definition
 3. Call bluekit_{namespace}_generate{Entity} with name, content, and projectPath
 ```
+
+**Otherwise**, the instructions in your `handleCreate{Entity}` method are sufficient.
 
 ## Best Practices
 
