@@ -166,7 +166,7 @@ Project path: ${projectPath}
       }
 
       // Ensure content has YAML front matter
-      const contentWithFrontMatter = this.ensureYamlFrontMatter(content, name);
+      const contentWithFrontMatter = this.ensureFinalNewline(this.ensureYamlFrontMatter(content, name));
 
       const kitPath = path.join(kitsDir, `${name}.md`);
       fs.writeFileSync(kitPath, contentWithFrontMatter, 'utf8');

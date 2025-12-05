@@ -176,7 +176,7 @@ Project path: ${projectPath}
       }
 
       // Ensure content has YAML front matter with type: agent
-      const contentWithFrontMatter = this.ensureYamlFrontMatter(content, name);
+      const contentWithFrontMatter = this.ensureFinalNewline(this.ensureYamlFrontMatter(content, name));
 
       const agentPath = path.join(agentsDir, `${name}.md`);
       fs.writeFileSync(agentPath, contentWithFrontMatter, 'utf8');

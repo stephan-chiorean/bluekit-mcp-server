@@ -508,13 +508,14 @@ export class BlueprintTools extends BaseToolSet {
 
       // Write blueprint.json
       const blueprintJsonPath = path.join(blueprintFolder, 'blueprint.json');
-      fs.writeFileSync(blueprintJsonPath, JSON.stringify(blueprint, null, 2), 'utf8');
+      const blueprintJson = this.ensureFinalNewline(JSON.stringify(blueprint, null, 2));
+      fs.writeFileSync(blueprintJsonPath, blueprintJson, 'utf8');
 
       // Write all task files with YAML front matter
       const taskFiles: string[] = [];
       for (const [taskFile, content] of Object.entries(tasks)) {
         const taskPath = path.join(blueprintFolder, taskFile);
-        const contentWithFrontMatter = this.addTaskFrontMatter(content, taskFile);
+        const contentWithFrontMatter = this.ensureFinalNewline(this.addTaskFrontMatter(content, taskFile));
         fs.writeFileSync(taskPath, contentWithFrontMatter, 'utf8');
         taskFiles.push(taskFile);
       }
@@ -908,7 +909,8 @@ export class BlueprintTools extends BaseToolSet {
       fs.mkdirSync(registryDir, { recursive: true });
     }
 
-    fs.writeFileSync(registryPath, JSON.stringify(registry, null, 2), 'utf8');
+    const registryJson = this.ensureFinalNewline(JSON.stringify(registry, null, 2));
+    fs.writeFileSync(registryPath, registryJson, 'utf8');
   }
 
   /**

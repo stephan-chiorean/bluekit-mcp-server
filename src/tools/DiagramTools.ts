@@ -235,7 +235,8 @@ Project path: ${projectPath}
       }
 
       const diagramPath = path.join(diagramsDir, `${name}.mmd`);
-      fs.writeFileSync(diagramPath, contentWithFrontMatter, 'utf8');
+      const finalContent = this.ensureFinalNewline(contentWithFrontMatter);
+      fs.writeFileSync(diagramPath, finalContent, 'utf8');
 
       // Check for empty tags and description and provide warnings
       const warnings = this.checkMetadataCompleteness(contentWithFrontMatter);

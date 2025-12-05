@@ -48,6 +48,18 @@ export class FileOperationsExecutor {
   ) {}
 
   /**
+   * Ensure content ends with a single newline.
+   * This prevents inconsistencies when users have different editor settings
+   * for "Insert Final Newline" which can create noisy git diffs.
+   */
+  private ensureFinalNewline(content: string): string {
+    if (!content.endsWith('\n')) {
+      return content + '\n';
+    }
+    return content;
+  }
+
+  /**
    * Execute a file operation
    */
   async execute(
@@ -179,7 +191,8 @@ export class FileOperationsExecutor {
     }
 
     // Write compiled template
-    fs.writeFileSync(fullDest, compiled, 'utf-8');
+    const finalCompiled = this.ensureFinalNewline(compiled);
+    fs.writeFileSync(fullDest, finalCompiled, 'utf-8');
     console.log(`[FileOperations] Generated from template: ${operation.source} -> ${resolvedDest}`);
   }
 
@@ -206,7 +219,8 @@ export class FileOperationsExecutor {
     }
 
     const placeholder = `// TODO: AI-generated code for ${operation.destination}\n// This file needs to be implemented\n`;
-    fs.writeFileSync(fullDest, placeholder, 'utf-8');
+    const finalPlaceholder = this.ensureFinalNewline(placeholder);
+    fs.writeFileSync(fullDest, finalPlaceholder, 'utf-8');
   }
 
   /**

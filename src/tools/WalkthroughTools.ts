@@ -214,7 +214,7 @@ Format: ${format}
       }
 
       // Ensure content has YAML front matter
-      const contentWithFrontMatter = this.ensureYamlFrontMatter(content, name, complexity, format);
+      const contentWithFrontMatter = this.ensureFinalNewline(this.ensureYamlFrontMatter(content, name, complexity, format));
 
       const walkthroughPath = path.join(walkthroughsDir, `${name}.md`);
       fs.writeFileSync(walkthroughPath, contentWithFrontMatter, 'utf8');

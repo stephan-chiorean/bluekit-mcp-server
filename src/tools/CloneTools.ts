@@ -359,7 +359,8 @@ export class CloneTools extends BaseToolSet {
       fs.mkdirSync(clonesDir, { recursive: true });
     }
 
-    fs.writeFileSync(clonesPath, JSON.stringify(clones, null, 2), 'utf8');
+    const clonesJson = this.ensureFinalNewline(JSON.stringify(clones, null, 2));
+    fs.writeFileSync(clonesPath, clonesJson, 'utf8');
   }
 
   /**

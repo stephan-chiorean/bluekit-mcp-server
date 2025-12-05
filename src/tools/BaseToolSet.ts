@@ -32,5 +32,17 @@ export abstract class BaseToolSet implements IToolSet {
 
   protected abstract createToolDefinitions(): ToolDefinition[];
   protected abstract createToolHandlers(): Record<string, ToolHandler>;
+
+  /**
+   * Ensure content ends with a single newline.
+   * This prevents inconsistencies when users have different editor settings
+   * for "Insert Final Newline" which can create noisy git diffs.
+   */
+  protected ensureFinalNewline(content: string): string {
+    if (!content.endsWith('\n')) {
+      return content + '\n';
+    }
+    return content;
+  }
 }
 

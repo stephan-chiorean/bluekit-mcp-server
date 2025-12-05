@@ -241,7 +241,8 @@ export class CommonTools extends BaseToolSet {
 
     // Write the registry back to file
     try {
-      fs.writeFileSync(registryPath, JSON.stringify(registry, null, 2), 'utf8');
+      const registryJson = this.ensureFinalNewline(JSON.stringify(registry, null, 2));
+      fs.writeFileSync(registryPath, registryJson, 'utf8');
     } catch (error) {
       throw new Error(`Failed to write projectRegistry.json: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
