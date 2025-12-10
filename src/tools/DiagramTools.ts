@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { ToolDefinition, ToolHandler } from '../types.js';
 import { BaseToolSet } from './BaseToolSet.js';
+import { MermaidValidatorClient } from '../services/MermaidValidatorClient.js';
 
 interface Diagram {
   alias: string;
@@ -11,8 +12,15 @@ interface Diagram {
 }
 
 export class DiagramTools extends BaseToolSet {
+  private validatorClient: MermaidValidatorClient;
+
   constructor() {
     super();
+    this.validatorClient = new MermaidValidatorClient();
+    // Initialize validator in background - don't block construction
+    this.validatorClient.initialize().catch(err =>
+      console.error('[DiagramTools] Validator initialization failed:', err)
+    );
   }
 
   protected createToolDefinitions(): ToolDefinition[] {
@@ -106,13 +114,39 @@ Create a valid mermaid diagram that clearly visualizes the requested information
 Include:
 - Clear node labels and relationships
 - Appropriate styling and grouping (subgraphs)
-- Color coding for different types of components (classDef)
+- Class assignments for component grouping (via \`class NodeA,NodeB className\`)
 - Meaningful arrows and connections
 - Legend or annotations if helpful
 
+### Styling Guidelines:
+**IMPORTANT**: All diagrams use dark theme rendering. Use \`classDef\` directives with dark colorful fills from the BlueKit color palette. Choose colors from the palette based on diagram context and codebase structure - there are no prescriptive mappings.
+
+**BlueKit Color Palette** (choose colors based on context):
+- **Primary Blue**: \`#4287f5\` (use for borders, lines, arrows when using primary accent)
+- **Dark Blue**: \`#1e3a8a\`
+- **Dark Purple**: \`#6b21a8\`
+- **Dark Teal**: \`#0f766e\`
+- **Dark Orange**: \`#c2410c\`
+- **Dark Indigo**: \`#4c1d95\`
+- **Dark Amber**: \`#a16207\`
+- **Dark Cyan**: \`#155e75\`
+- **Dark Gray**: \`#333\` (for strokes/borders when not using primary blue)
+
+Styling approach:
+- Use \`classDef\` with colors from the palette above - choose colors that make sense for your diagram's context
+- Use dark, vibrant colors that provide good contrast with light text (all palette colors work well)
+- Assign classes to nodes using: \`class NodeA,NodeB className\`
+- Use meaningful class names based on the diagram's content and structure
+- Different groups/categories in your diagram should use different colors from the palette to help distinguish them visually
+- Example format: \`classDef group1 fill:#1e3a8a,stroke:#4287f5,stroke-width:2px\`
+
 ### Common Mermaid Syntax Issues to Avoid:
 - **@ symbol in node labels**: The @ symbol at the start of node labels causes parse errors. Use "modelcontextprotocol/sdk" instead of "@modelcontextprotocol/sdk"
-- **Special characters**: Avoid using @, #, $, %, ^, &, *, |, backslash, {, }, [, ], <, > at the start of node labels
+- **Pipe character (|) in node labels**: The pipe character ANYWHERE in a node label causes parse errors. Use "/" or "," instead. For example, use "light / dark" instead of "light | dark". Note: Pipes are valid in edge labels (-->|label|), only avoid them in node labels.
+- **Nested square brackets in node labels**: Square brackets inside node label brackets cause parse errors. Remove the brackets and use plain text. For example, use "item1, item2" instead of "['item1', 'item2']" when inside a node label.
+- **Parentheses in node labels**: Parentheses inside node labels cause parse errors because Mermaid uses parentheses for node shapes (rounded rectangles). Remove parentheses or use plain text. For example, use "item1, item2" instead of "(item1, item2)" when inside a node label.
+- **Quotes in node labels**: Quotes (single or double) inside node labels can cause parse errors. Remove quotes and use plain text. For example, use "context, viewer" instead of the quoted versions when inside a node label.
+- **Special characters at start**: Avoid using @, #, $, %, ^, &, *, backslash, {, }, [, ], <, > at the start of node labels
 - **Unclosed brackets**: Ensure all node definitions use proper bracket syntax: NodeID[Label] or NodeID(Label) or NodeID{Label}
 - **Invalid edge syntax**: Use proper arrow syntax: -->, -.-->, ==>, --, etc.
 - **Unmatched quotes**: Ensure all quoted strings in labels are properly closed
@@ -143,10 +177,18 @@ tags:
 
 \`\`\`mermaid
 graph TB
-    Client[Client Application]
-    API[API Gateway]
-    Service[Backend Service]
-    DB[(Database)]
+    subgraph UI["🖥️ UI Layer"]
+        Client[Client Application]
+    end
+    
+    subgraph API["🔌 API Layer"]
+        API[API Gateway]
+    end
+    
+    subgraph Backend["🦀 Backend Layer"]
+        Service[Backend Service]
+        DB[(Database)]
+    end
 
     Client -->|HTTP Request| API
     API -->|Route| Service
@@ -155,13 +197,15 @@ graph TB
     Service -->|Response| API
     API -->|HTTP Response| Client
 
-    classDef client fill:#e1f5ff,stroke:#01579b
-    classDef backend fill:#c8e6c9,stroke:#2e7d32
-    classDef data fill:#f3e5f5,stroke:#6a1b9a
-
-    class Client client
-    class API,Service backend
-    class DB data
+    %% Define classes using colors from BlueKit palette (chosen based on diagram context)
+    classDef clientGroup fill:#1e3a8a,stroke:#4287f5,stroke-width:2px
+    classDef apiGroup fill:#0f766e,stroke:#4287f5,stroke-width:2px
+    classDef serviceGroup fill:#6b21a8,stroke:#4287f5,stroke-width:2px
+    
+    %% Assign classes to nodes - colors work well in dark theme
+    class Client clientGroup
+    class API apiGroup
+    class Service,DB serviceGroup
 \`\`\`
 
 ## Project Context
@@ -180,7 +224,7 @@ Project path: ${projectPath}
     ];
   }
 
-  private handleGenerateDiagram(params: Record<string, unknown>): Array<{ type: 'text'; text: string }> {
+  private async handleGenerateDiagram(params: Record<string, unknown>): Promise<Array<{ type: 'text'; text: string }>> {
     const name = params.name as string;
     const content = params.content as string;
     const projectPath = params.projectPath as string;
@@ -216,22 +260,45 @@ Project path: ${projectPath}
       // Ensure content has YAML front matter
       let contentWithFrontMatter = this.ensureYamlFrontMatter(content, name);
 
-      // Validate and fix mermaid syntax
-      const validationResult = this.validateMermaidSyntax(contentWithFrontMatter);
-      
-      // Apply auto-fixes if any were suggested (e.g., @ symbol removal)
-      if (validationResult.fixedContent) {
+      // Extract mermaid code for validation
+      const mermaidCode = this.extractMermaidCode(contentWithFrontMatter);
+
+      // Validate with MCP (primary) or fallback to regex validation
+      let usedFallback = false;
+      const validationResult = await this.validateWithMCP(mermaidCode)
+        .catch(err => {
+          console.error('[DiagramTools] MCP validation unavailable, using fallback:', err);
+          usedFallback = true;
+          return this.validateMermaidSyntax(contentWithFrontMatter);
+        });
+
+      // Apply auto-fixes if using fallback validation
+      if ('fixedContent' in validationResult && validationResult.fixedContent) {
         contentWithFrontMatter = validationResult.fixedContent;
       }
-      
-      // Filter out auto-fixable errors (we've already fixed them)
-      const unfixableErrors = validationResult.errors.filter(e => 
-        !e.includes('@ symbol at start of label')
-      );
-      
-      // Only throw errors for issues we couldn't auto-fix
-      if (unfixableErrors.length > 0) {
-        throw new Error(`Mermaid syntax errors detected:\n${unfixableErrors.join('\n')}\n\nPlease fix these issues before generating the diagram.`);
+
+      // Check for validation errors
+      const isValid = 'isValid' in validationResult ? validationResult.isValid : validationResult.errors.length === 0;
+      const errors = validationResult.errors || [];
+
+      if (!isValid && errors.length > 0) {
+        // Filter out auto-fixable errors if using fallback
+        const unfixableErrors = usedFallback && 'fixedContent' in validationResult
+          ? errors.filter(e =>
+              !e.includes('@ symbol at start of label') &&
+              !e.includes('Pipe character "|" in label') &&
+              !e.includes('Nested square brackets in label') &&
+              !e.includes('Parentheses in label') &&
+              !e.includes('Quotes in label')
+            )
+          : errors;
+
+        if (unfixableErrors.length > 0) {
+          throw new Error(
+            `Mermaid syntax validation failed:\n\n${unfixableErrors.join('\n\n')}\n\n` +
+            `Please fix these errors and try again.`
+          );
+        }
       }
 
       const diagramPath = path.join(diagramsDir, `${name}.mmd`);
@@ -241,19 +308,29 @@ Project path: ${projectPath}
       // Check for empty tags and description and provide warnings
       const warnings = this.checkMetadataCompleteness(contentWithFrontMatter);
       const warningText = warnings.length > 0 ? '\n⚠️  ' + warnings.join('\n⚠️  ') : '';
-      
-      // Check if we auto-fixed any issues
-      const autoFixedCount = validationResult.errors.filter(e => 
-        e.includes('@ symbol at start of label')
-      ).length;
-      const autoFixText = autoFixedCount > 0 
-        ? `\n🔧 Auto-fixed ${autoFixedCount} mermaid syntax issue(s) (removed @ symbols from node labels).`
+
+      // Check if we auto-fixed any issues (only applicable for fallback validation)
+      const autoFixedCount = usedFallback && 'fixedContent' in validationResult && validationResult.errors
+        ? validationResult.errors.filter(e =>
+            e.includes('@ symbol at start of label') ||
+            e.includes('Pipe character "|" in label') ||
+            e.includes('Nested square brackets in label') ||
+            e.includes('Parentheses in label') ||
+            e.includes('Quotes in label')
+          ).length
+        : 0;
+      const autoFixText = autoFixedCount > 0
+        ? `\n🔧 Auto-fixed ${autoFixedCount} mermaid syntax issue(s) (@ symbols, pipes, brackets, etc.).`
         : '';
+
+      // Indicate validation method used
+      const validationMethod = usedFallback ? 'fallback' : 'MCP';
+      const validationText = `\n✓ Validated with ${validationMethod} validator`;
 
       return [
         {
           type: 'text',
-          text: `✅ Generated diagram: ${diagramPath}${autoFixText}${warningText}`
+          text: `✅ Generated diagram: ${diagramPath}${validationText}${autoFixText}${warningText}`
         }
       ];
     } catch (error) {
@@ -415,8 +492,91 @@ Project path: ${projectPath}
       }
     }
 
+    // Check for pipe characters in node labels (causes parse errors)
+    // Pattern: NodeID[...|...] - pipe anywhere in label causes parse error
+    // Note: Pipes are valid in edge labels (-->|label|) so we only check node labels
+    const pipeInLabelPattern = /(\w+)\[([^\]]*\|[^\]]*)\]/g;
+    const pipeMatches = Array.from(mermaidCode.matchAll(pipeInLabelPattern));
+    
+    if (pipeMatches.length > 0) {
+      for (const match of pipeMatches) {
+        const nodeId = match[1];
+        const label = match[2];
+        const fixedLabel = label.replace(/\s*\|\s*/g, ' / '); // Replace pipes with forward slashes
+        errors.push(
+          `Line with node "${nodeId}": Pipe character "|" in label "${label}" causes parse errors. Use "${fixedLabel}" instead.`
+        );
+        fixedMermaidCode = fixedMermaidCode.replace(match[0], `${nodeId}[${fixedLabel}]`);
+        hasFixes = true;
+      }
+    }
+
+    // Check for nested square brackets in node labels (causes parse errors)
+    // Pattern: NodeID[...[...]...] - nested brackets confuse the parser
+    // We need to match brackets that are inside node label brackets
+    // This is tricky because we need to find [ inside [ ... ]
+    const nestedBracketPattern = /(\w+)\[([^\]]*\[[^\]]*)\]/g;
+    const nestedBracketMatches = Array.from(mermaidCode.matchAll(nestedBracketPattern));
+    
+    if (nestedBracketMatches.length > 0) {
+      for (const match of nestedBracketMatches) {
+        const nodeId = match[1];
+        const label = match[2];
+        // Replace square brackets with plain text (remove brackets, keep content)
+        // For arrays like ['item1', 'item2'], convert to "item1", "item2"
+        let fixedLabel = label;
+        // Remove outer brackets from array notation
+        fixedLabel = fixedLabel.replace(/\[([^\]]+)\]/g, '$1');
+        // Clean up any remaining brackets
+        fixedLabel = fixedLabel.replace(/\[/g, '').replace(/\]/g, '');
+        errors.push(
+          `Line with node "${nodeId}": Nested square brackets in label "${label}" cause parse errors. Removed brackets: "${fixedLabel}"`
+        );
+        fixedMermaidCode = fixedMermaidCode.replace(match[0], `${nodeId}[${fixedLabel}]`);
+        hasFixes = true;
+      }
+    }
+
+    // Check for parentheses in node labels (causes parse errors - parentheses are used for node shapes)
+    // Pattern: NodeID[...(...)...] - parentheses inside square brackets confuse the parser
+    const parenInLabelPattern = /(\w+)\[([^\]]*\([^\]]*\)[^\]]*)\]/g;
+    const parenMatches = Array.from(mermaidCode.matchAll(parenInLabelPattern));
+    
+    if (parenMatches.length > 0) {
+      for (const match of parenMatches) {
+        const nodeId = match[1];
+        const label = match[2];
+        // Replace parentheses with plain text (remove parens, keep content)
+        const fixedLabel = label.replace(/\(/g, '').replace(/\)/g, '');
+        errors.push(
+          `Line with node "${nodeId}": Parentheses in label "${label}" cause parse errors (parentheses are used for node shapes). Removed parentheses: "${fixedLabel}"`
+        );
+        fixedMermaidCode = fixedMermaidCode.replace(match[0], `${nodeId}[${fixedLabel}]`);
+        hasFixes = true;
+      }
+    }
+
+    // Check for quotes in node labels (can cause parse errors)
+    // Pattern: NodeID[..."...] or NodeID[...'...] - quotes inside square brackets can confuse the parser
+    const quoteInLabelPattern = /(\w+)\[([^\]]*["'][^\]]*)\]/g;
+    const quoteMatches = Array.from(mermaidCode.matchAll(quoteInLabelPattern));
+    
+    if (quoteMatches.length > 0) {
+      for (const match of quoteMatches) {
+        const nodeId = match[1];
+        const label = match[2];
+        // Remove quotes but keep content
+        const fixedLabel = label.replace(/["']/g, '');
+        errors.push(
+          `Line with node "${nodeId}": Quotes in label "${label}" may cause parse errors. Removed quotes: "${fixedLabel}"`
+        );
+        fixedMermaidCode = fixedMermaidCode.replace(match[0], `${nodeId}[${fixedLabel}]`);
+        hasFixes = true;
+      }
+    }
+
     // Check for other problematic special characters at start of labels
-    const problematicStartChars = /(\w+)\[([#\$%\^\&\*\|\\\{\}\[\]<>][^\]]+)\]/g;
+    const problematicStartChars = /(\w+)\[([#\$%\^\&\*\\\{\}\[\]<>][^\]]+)\]/g;
     const problematicMatches = Array.from(mermaidCode.matchAll(problematicStartChars));
     
     if (problematicMatches.length > 0) {
@@ -476,5 +636,49 @@ Project path: ${projectPath}
       errors,
       fixedContent: hasFixes ? fixedContent : undefined
     };
+  }
+
+  /**
+   * Validate mermaid code using MCP validator
+   * Returns structured validation result
+   */
+  private async validateWithMCP(mermaidCode: string): Promise<{
+    isValid: boolean;
+    errors?: string[];
+  }> {
+    try {
+      const result = await this.validatorClient.validate(mermaidCode);
+      return {
+        isValid: result.isValid,
+        errors: result.errors
+      };
+    } catch (error) {
+      // Re-throw to trigger fallback
+      throw error;
+    }
+  }
+
+  /**
+   * Extract mermaid code from diagram content
+   * Handles both markdown-wrapped and raw mermaid code
+   */
+  private extractMermaidCode(content: string): string {
+    // Remove YAML front matter
+    let cleaned = content.replace(/^---\s*\n[\s\S]*?\n---\s*\n?/, '');
+
+    // Try to match mermaid code block: ```mermaid ... ```
+    const mermaidBlockMatch = cleaned.match(/```mermaid\s*\n([\s\S]*?)\n?```/);
+    if (mermaidBlockMatch) {
+      return mermaidBlockMatch[1].trim();
+    }
+
+    // Try generic code block: ``` ... ```
+    const genericBlockMatch = cleaned.match(/```\s*\n([\s\S]*?)\n?```/);
+    if (genericBlockMatch) {
+      return genericBlockMatch[1].trim();
+    }
+
+    // Assume raw mermaid code
+    return cleaned.trim();
   }
 }

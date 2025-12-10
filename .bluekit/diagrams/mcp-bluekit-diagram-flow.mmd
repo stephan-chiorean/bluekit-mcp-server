@@ -1,0 +1,125 @@
+---
+alias: MCP BlueKit Diagram Flow
+description: High-level interaction flow between MCP client, BlueKit MCP server, and diagram generation tools showing request handling, validation, and file operations
+tags:
+  - mcp
+  - diagrams
+  - architecture
+  - flow
+  - validation
+---
+```mermaid
+graph TB
+    subgraph Client["🖥️ MCP CLIENT LAYER"]
+        AIClient[AI Client / Cursor]
+        UserRequest[User requests diagram creation]
+        
+        AIClient --> UserRequest
+    end
+    
+    subgraph MCPProtocol["🔌 MCP PROTOCOL"]
+        StdioTransport[Stdio Transport]
+        CallToolRequest[CallTool Request<br/>bluekit_diagram_createDiagram]
+        CallToolGenerate[CallTool Request<br/>bluekit_diagram_generateDiagram]
+        
+        UserRequest --> StdioTransport
+        StdioTransport --> CallToolRequest
+        CallToolRequest --> CallToolGenerate
+    end
+    
+    subgraph MCPServer["🦀 BLUEKIT MCP SERVER"]
+        ServerInstance[BluekitMCPServer]
+        RequestHandler[Request Handler<br/>CallToolRequestSchema]
+        ToolRouter[Tool Router<br/>BlueKitTools.getToolHandler]
+        
+        CallToolRequest --> ServerInstance
+        CallToolGenerate --> ServerInstance
+        ServerInstance --> RequestHandler
+        RequestHandler --> ToolRouter
+    end
+    
+    subgraph DiagramTools["📊 DIAGRAM TOOLS"]
+        CreateDiagramHandler[handleCreateDiagram<br/>Returns instructions]
+        GenerateDiagramHandler[handleGenerateDiagram<br/>Processes diagram]
+        ExtractMermaidCode[Extract Mermaid Code<br/>from content]
+        EnsureFrontMatter[Ensure YAML Front Matter<br/>alias, description, tags]
+        
+        ToolRouter --> CreateDiagramHandler
+        CreateDiagramHandler --> GenerateDiagramHandler
+        GenerateDiagramHandler --> ExtractMermaidCode
+        GenerateDiagramHandler --> EnsureFrontMatter
+    end
+    
+    subgraph Validation["✅ VALIDATION LAYER"]
+        ValidateWithMCP[Validate with MCP<br/>MermaidValidatorClient]
+        ValidatorMCP[Validator MCP Server<br/>@rtuin/mcp-mermaid-validator]
+        FallbackValidation[Fallback Validation<br/>Regex-based syntax check]
+        AutoFix[Auto-fix Common Issues<br/>@ symbols, pipes, brackets]
+        
+        ExtractMermaidCode --> ValidateWithMCP
+        ValidateWithMCP -->|Primary| ValidatorMCP
+        ValidateWithMCP -->|Fallback| FallbackValidation
+        FallbackValidation --> AutoFix
+        ValidatorMCP -->|Success| ValidationResult
+        AutoFix --> ValidationResult
+    end
+    
+    subgraph FileSystem["📁 FILE SYSTEM OPERATIONS"]
+        ResolveProjectPath[Resolve Project Path<br/>absolute path]
+        EnsureDiagramsDir[Ensure .bluekit/diagrams/<br/>directory exists]
+        WriteDiagramFile[Write Diagram File<br/>name.mmd]
+        CheckMetadata[Check Metadata Completeness<br/>tags, description]
+        
+        ValidationResult --> ResolveProjectPath
+        ResolveProjectPath --> EnsureDiagramsDir
+        EnsureDiagramsDir --> WriteDiagramFile
+        WriteDiagramFile --> CheckMetadata
+    end
+    
+    subgraph Response["📤 RESPONSE LAYER"]
+        FormatResponse[Format Response<br/>success message]
+        IncludeWarnings[Include Warnings<br/>if metadata incomplete]
+        IncludeAutoFix[Include Auto-fix Info<br/>if issues fixed]
+        ReturnToClient[Return to MCP Client]
+        
+        CheckMetadata --> FormatResponse
+        FormatResponse --> IncludeWarnings
+        FormatResponse --> IncludeAutoFix
+        IncludeWarnings --> ReturnToClient
+        IncludeAutoFix --> ReturnToClient
+    end
+    
+    subgraph FileSystemStorage["💾 FILE SYSTEM"]
+        ProjectRoot[Project Root Directory]
+        BluekitDir[.bluekit/ directory]
+        DiagramsDir[diagrams/ subdirectory]
+        DiagramFile[Diagram File<br/>name.mmd]
+        
+        ProjectRoot --> BluekitDir
+        BluekitDir --> DiagramsDir
+        DiagramsDir --> DiagramFile
+    end
+    
+    WriteDiagramFile -.->|Writes to| DiagramFile
+    ReturnToClient --> StdioTransport
+    StdioTransport --> AIClient
+    
+    classDef clientLayer fill:#1e3a8a,stroke:#333,stroke-width:2px
+    classDef mcpProtocol fill:#0f766e,stroke:#333,stroke-width:2px
+    classDef mcpServer fill:#6b21a8,stroke:#333,stroke-width:2px
+    classDef diagramTools fill:#c2410c,stroke:#333,stroke-width:2px
+    classDef validation fill:#4c1d95,stroke:#333,stroke-width:2px
+    classDef fileSystem fill:#a16207,stroke:#333,stroke-width:2px
+    classDef response fill:#155e75,stroke:#333,stroke-width:2px
+    classDef storage fill:#7c2d12,stroke:#333,stroke-width:2px
+    
+    class AIClient,UserRequest clientLayer
+    class StdioTransport,CallToolRequest,CallToolGenerate mcpProtocol
+    class ServerInstance,RequestHandler,ToolRouter mcpServer
+    class CreateDiagramHandler,GenerateDiagramHandler,ExtractMermaidCode,EnsureFrontMatter diagramTools
+    class ValidateWithMCP,ValidatorMCP,FallbackValidation,AutoFix,ValidationResult validation
+    class ResolveProjectPath,EnsureDiagramsDir,WriteDiagramFile,CheckMetadata fileSystem
+    class FormatResponse,IncludeWarnings,IncludeAutoFix,ReturnToClient response
+    class ProjectRoot,BluekitDir,DiagramsDir,DiagramFile storage
+```
+

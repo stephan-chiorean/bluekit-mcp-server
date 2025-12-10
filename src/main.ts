@@ -103,7 +103,7 @@ Always read the appropriate definition resource first to understand the structur
       }
 
       try {
-        const content = handler(toolArgs);
+        const content = await handler(toolArgs);
         console.error(`[MCP] Tool ${toolName} completed successfully`);
         return { content };
       } catch (error) {

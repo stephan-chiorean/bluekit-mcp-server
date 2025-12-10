@@ -7,15 +7,18 @@
   "scripts": {
     "build": "tsc",
     "start": "tsx src/main.ts",
-    "dev": "tsx src/main.ts"
+    "dev": "tsx src/main.ts",
+    "migrate:diagrams": "tsx scripts/migrate-diagram-theming.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.23.0",
+    "@rtuin/mcp-mermaid-validator": "^0.7.0",
     "ajv": "^8.12.0",
     "fs-extra": "^11.2.0",
+    "glob": "^10.3.10",
     "handlebars": "^4.7.8",
     "js-yaml": "^4.1.1"
   },
