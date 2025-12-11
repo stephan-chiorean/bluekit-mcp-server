@@ -44,6 +44,7 @@ class BluekitMCPServer {
 Read these resources to understand how to generate each artifact type:
 - bluekit://prompts/get-agent-definition.md - Learn about Agent structure and requirements
 - bluekit://prompts/get-blueprint-definition.md - Learn about Blueprint JSON structure
+- bluekit://prompts/get-diagram-definition.md - Learn about Diagram structure and requirements
 - bluekit://prompts/get-kit-definition.md - Learn about Kit structure and requirements
 - bluekit://prompts/get-walkthrough-definition.md - Learn about Walkthrough structure and requirements
 
@@ -68,6 +69,11 @@ Read these resources to understand how to generate each artifact type:
 1. Read the resource: bluekit://prompts/get-blueprint-definition.md
 2. Generate the blueprint JSON structure
 3. Call bluekit_blueprint_generateBlueprint with the blueprint object
+
+### To Generate a Diagram:
+1. Read the resource: bluekit://prompts/get-diagram-definition.md
+2. Generate the diagram content based on the definition
+3. Call bluekit_diagram_generateDiagram with name, content, and projectPath
 
 ## Other Tools
 - bluekit_blueprint_listBlueprints - List all blueprints in global registry
