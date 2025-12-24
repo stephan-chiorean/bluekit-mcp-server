@@ -208,6 +208,23 @@ async function main(): Promise<void> {
   await server.run();
 }
 
+// Handle stderr write errors gracefully (EPIPE can occur when client disconnects)
+process.stderr.on('error', (err: any) => {
+  // Ignore EPIPE errors - they're expected when client closes connection
+  if (err.code !== 'EPIPE') {
+    console.error('[MCP] stderr error:', err);
+  }
+});
+
+// Handle stdout write errors gracefully (EPIPE can occur when client disconnects)
+// This is where the MCP SDK's StdioServerTransport writes responses
+process.stdout.on('error', (err: any) => {
+  // Ignore EPIPE errors - they're expected when client closes connection
+  if (err.code !== 'EPIPE') {
+    console.error('[MCP] stdout error:', err);
+  }
+});
+
 main().catch((error) => {
   console.error('[MCP] Fatal error:', error);
   process.exit(1);

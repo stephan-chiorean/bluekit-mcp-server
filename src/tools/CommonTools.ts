@@ -1,6 +1,8 @@
 import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
+import Database from 'better-sqlite3';
 import { ToolDefinition, ToolHandler } from '../types.js';
 import { BaseToolSet } from './BaseToolSet.js';
 
@@ -48,7 +50,7 @@ export class CommonTools extends BaseToolSet {
       },
       {
         name: 'bluekit.init_project',
-        description: 'Initialize a BlueKit project by linking it to the BlueKit store. Creates ~/.bluekit directory and projectRegistry.json if needed.',
+        description: 'Initialize a BlueKit project by linking it to the BlueKit store. Creates ~/.bluekit directory and adds project to SQLite database.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -167,7 +169,7 @@ export class CommonTools extends BaseToolSet {
 
     const homeDir = os.homedir();
     const bluekitStoreDir = path.join(homeDir, '.bluekit');
-    const registryPath = path.join(bluekitStoreDir, 'projectRegistry.json');
+    const dbPath = path.join(bluekitStoreDir, 'bluekit.db');
 
     // Check if ~/.bluekit directory exists
     if (!fs.existsSync(bluekitStoreDir)) {
@@ -191,72 +193,119 @@ export class CommonTools extends BaseToolSet {
       }
     }
 
-    // Read or create projectRegistry.json
-    interface ProjectEntry {
-      id: string;
-      title?: string;
-      description?: string;
-      path: string;
-    }
-
-    let registry: ProjectEntry[] = [];
-    
-    if (fs.existsSync(registryPath)) {
-      try {
-        const registryContent = fs.readFileSync(registryPath, 'utf8');
-        const parsed = JSON.parse(registryContent);
-        
-        if (Array.isArray(parsed)) {
-          registry = parsed;
-        } else {
-          registry = [];
-        }
-      } catch (error) {
-        registry = [];
-      }
-    }
-
-    // Check if project is already in registry
     const normalizedProjectPath = path.resolve(projectPath);
-    const existingIndex = registry.findIndex(p => path.resolve(p.path) === normalizedProjectPath);
+    const projectName = path.basename(projectPath);
+    const now = Date.now();
 
-    if (existingIndex >= 0) {
-      const projectName = path.basename(projectPath);
-      registry[existingIndex] = {
-        id: registry[existingIndex].id,
-        title: registry[existingIndex].title || projectName,
-        description: registry[existingIndex].description,
-        path: normalizedProjectPath
-      };
-    } else {
-      const projectName = path.basename(projectPath);
-      const newProject: ProjectEntry = {
-        id: Date.now().toString(),
-        title: projectName,
-        description: '',
-        path: normalizedProjectPath
-      };
-      registry.push(newProject);
-    }
-
-    // Write the registry back to file
+    // Connect to database
+    let db: Database.Database;
     try {
-      const registryJson = this.ensureFinalNewline(JSON.stringify(registry, null, 2));
-      fs.writeFileSync(registryPath, registryJson, 'utf8');
+      db = new Database(dbPath);
+      
+      // Ensure projects table exists (in case database is new)
+      // Note: Schema matches Rust migration exactly (no UNIQUE on path)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS projects (
+          id TEXT PRIMARY KEY NOT NULL,
+          name TEXT NOT NULL,
+          path TEXT NOT NULL,
+          description TEXT,
+          tags TEXT,
+          git_connected INTEGER NOT NULL DEFAULT 0,
+          git_url TEXT,
+          git_branch TEXT,
+          git_remote TEXT,
+          last_commit_sha TEXT,
+          last_synced_at INTEGER,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          last_opened_at INTEGER
+        )
+      `);
+      
+      // Create indexes if they don't exist (matching Rust migration)
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_projects_git_connected ON projects(git_connected);
+        CREATE INDEX IF NOT EXISTS idx_projects_path ON projects(path);
+      `);
     } catch (error) {
-      throw new Error(`Failed to write projectRegistry.json: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(`Failed to connect to database: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
-    const action = existingIndex >= 0 ? 'updated' : 'added';
-    return [
-      {
-        type: 'text',
-        text: `✅ Project ${action} to BlueKit store!\n\n` +
-              `Registry location: ${registryPath}\n` +
-              `Project path: ${normalizedProjectPath}\n` +
-              `Total projects in registry: ${registry.length}`
+    try {
+      // Check if project already exists by path
+      const existing = db.prepare('SELECT id, name, description FROM projects WHERE path = ?').get(normalizedProjectPath) as { id: string; name: string; description: string | null } | undefined;
+
+      let action: string;
+      let projectId: string;
+
+      if (existing) {
+        // Update existing project
+        action = 'updated';
+        projectId = existing.id;
+        
+        db.prepare(`
+          UPDATE projects 
+          SET name = ?, updated_at = ?
+          WHERE path = ?
+        `).run(projectName, now, normalizedProjectPath);
+      } else {
+        // Insert new project
+        action = 'added';
+        projectId = crypto.randomUUID(); // Use UUID to match Rust implementation
+        
+        db.prepare(`
+          INSERT INTO projects (
+            id, name, path, description, tags, git_connected, git_url, git_branch,
+            git_remote, last_commit_sha, last_synced_at, created_at, updated_at, last_opened_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          projectId,
+          projectName,
+          normalizedProjectPath,
+          null, // description
+          null, // tags
+          0,    // git_connected
+          null, // git_url
+          null, // git_branch
+          null, // git_remote
+          null, // last_commit_sha
+          null, // last_synced_at
+          now,  // created_at
+          now,  // updated_at
+          null  // last_opened_at
+        );
       }
-    ];
+
+      // Verify the project was inserted/updated correctly
+      const verifyProject = db.prepare('SELECT id, name, path FROM projects WHERE id = ?').get(projectId) as { id: string; name: string; path: string } | undefined;
+      
+      if (!verifyProject) {
+        db.close();
+        throw new Error('Failed to verify project was saved to database');
+      }
+
+      // Get total count of projects
+      const totalProjects = db.prepare('SELECT COUNT(*) as count FROM projects').get() as { count: number };
+      
+      db.close();
+
+      return [
+        {
+          type: 'text',
+          text: `✅ Project ${action} to BlueKit database!\n\n` +
+                `Database location: ${dbPath}\n` +
+                `Project path: ${normalizedProjectPath}\n` +
+                `Project ID: ${projectId}\n` +
+                `Project name: ${verifyProject.name}\n` +
+                `Total projects in database: ${totalProjects.count}\n\n` +
+                `Note: If the project doesn't appear in the BlueKit app, try refreshing the projects list or restarting the app.`
+        }
+      ];
+    } catch (error) {
+      db.close();
+      throw new Error(`Failed to write to database: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 }
 

@@ -16,7 +16,9 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.23.0",
     "@rtuin/mcp-mermaid-validator": "^0.7.0",
+    "@types/better-sqlite3": "^7.6.13",
     "ajv": "^8.12.0",
+    "better-sqlite3": "^12.5.0",
     "fs-extra": "^11.2.0",
     "glob": "^10.3.10",
     "handlebars": "^4.7.8",

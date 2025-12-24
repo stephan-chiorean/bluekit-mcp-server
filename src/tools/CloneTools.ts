@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
+import Database from 'better-sqlite3';
 import { ToolDefinition, ToolHandler } from '../types.js';
 import { BaseToolSet } from './BaseToolSet.js';
 
@@ -26,7 +27,7 @@ export class CloneTools extends BaseToolSet {
     return [
       {
         name: 'bluekit_clone_register',
-        description: 'Register a git repository snapshot as a clone. Automatically detects git URL, current commit, branch, and tags. Adds to projectRegistry.json for UI display. Use when user says "clone this project" or "save this as a clone".',
+        description: 'Register a git repository snapshot as a clone. Automatically detects git URL, current commit, branch, and tags. Saves to project\'s .bluekit/clones.json file. Use when user says "clone this project" or "save this as a clone".',
         inputSchema: {
           type: 'object',
           properties: {
@@ -301,11 +302,11 @@ export class CloneTools extends BaseToolSet {
   }
 
   /**
-   * Get the project registry path
+   * Get the database path
    */
-  private getRegistryPath(): string {
+  private getDatabasePath(): string {
     const homeDir = process.env.HOME || process.env.USERPROFILE || '~';
-    return path.join(homeDir, '.bluekit', 'projectRegistry.json');
+    return path.join(homeDir, '.bluekit', 'bluekit.db');
   }
 
   /**
@@ -369,25 +370,24 @@ export class CloneTools extends BaseToolSet {
   private addToRegistry(clone: CloneMetadata, projectPath: string): void {
     const normalizedProjectPath = path.resolve(projectPath);
 
-    // Verify project is in registry (but don't require it to have clones in registry)
-    const registryPath = this.getRegistryPath();
-    if (fs.existsSync(registryPath)) {
+    // Verify project exists in database (not JSON registry)
+    const dbPath = this.getDatabasePath();
+    if (fs.existsSync(dbPath)) {
       try {
-        const content = fs.readFileSync(registryPath, 'utf8');
-        const registry = JSON.parse(content);
-        if (Array.isArray(registry)) {
-          const projectExists = registry.some(
-            (item: any) => path.resolve(item.path) === normalizedProjectPath
-          );
-          if (!projectExists) {
-            throw new Error(`Project not found in registry: ${normalizedProjectPath}. Please run bluekit_init_project first.`);
-          }
+        const db = new Database(dbPath);
+        
+        // Check if project exists in database
+        const project = db.prepare('SELECT id FROM projects WHERE path = ?').get(normalizedProjectPath) as { id: string } | undefined;
+        db.close();
+        
+        if (!project) {
+          throw new Error(`Project not found in database: ${normalizedProjectPath}. Please run bluekit init first.`);
         }
       } catch (error) {
-        if (error instanceof Error && error.message.includes('not found in registry')) {
+        if (error instanceof Error && error.message.includes('not found in database')) {
           throw error;
         }
-        // If registry read fails, continue anyway
+        // If database check fails, continue anyway (database might not exist yet)
       }
     }
 
@@ -409,25 +409,24 @@ export class CloneTools extends BaseToolSet {
   }
 
   /**
-   * Get a clone from any project's clones file (searches all projects in registry)
+   * Get a clone from any project's clones file (searches all projects in database)
    */
   private getCloneFromRegistry(cloneId: string): CloneMetadata | undefined {
-    const registryPath = this.getRegistryPath();
+    const dbPath = this.getDatabasePath();
 
-    if (!fs.existsSync(registryPath)) {
+    if (!fs.existsSync(dbPath)) {
       return undefined;
     }
 
     try {
-      const content = fs.readFileSync(registryPath, 'utf8');
-      const registry = JSON.parse(content);
+      const db = new Database(dbPath);
 
-      if (!Array.isArray(registry)) {
-        return undefined;
-      }
+      // Get all projects from database
+      const projects = db.prepare('SELECT path FROM projects').all() as Array<{ path: string }>;
+      db.close();
 
       // Search through all projects' clone files
-      for (const project of registry) {
+      for (const project of projects) {
         if (project.path && typeof project.path === 'string') {
           const projectPath = path.resolve(project.path);
           if (fs.existsSync(projectPath)) {
