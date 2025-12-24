@@ -1,0 +1,16 @@
+[
+  {
+    "id": "bluekit-mcp-server-20251202",
+    "name": "BlueKit MCP Server",
+    "description": "MCP server that exposes BlueKit tools for kits, blueprints, walkthroughs, agents, diagrams, and clones.",
+    "gitUrl": "https://github.com/stephan-chiorean/bluekit-mcp-server.git",
+    "gitCommit": "5421a9bd565ac37e3495a7f9a0c84cf7d34e446f",
+    "gitBranch": "main",
+    "tags": [
+      "mcp",
+      "bluekit",
+      "server"
+    ],
+    "createdAt": "2025-12-02T00:02:34.248Z"
+  }
+]
